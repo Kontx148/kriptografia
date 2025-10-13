@@ -10,6 +10,8 @@ SUNet: <SUNet ID>
 Replace this with a description of the program.
 """
 import utils
+from lab1.utils import shift_right, shift_left
+
 
 # Caesar Cipher
 
@@ -20,10 +22,9 @@ def encrypt_caesar(plaintext : str):
     """
     ciphertext = ''
     for ch in plaintext:
-        # Assume char is uppercase
         if ch.isalpha():
             ch = ch.upper()
-            ciphertext += chr((ord(ch) + 3 - ord('A')) % 26 + ord('A'))
+            ciphertext += shift_right(ch, 3)
         else:
             ciphertext += ch
     return ciphertext
@@ -36,10 +37,9 @@ def decrypt_caesar(ciphertext):
     """
     plaintext = ''
     for ch in ciphertext:
-        # Assume char is uppercase
         if ch.isalpha():
             ch = ch.upper()
-            plaintext += chr((ord(ch) - 3 - ord('A')) % 26 + ord('A'))
+            plaintext += shift_left(ch, 3)
         else:
             plaintext += ch
     return plaintext
@@ -47,20 +47,37 @@ def decrypt_caesar(ciphertext):
 
 # Vigenere Cipher
 
-def encrypt_vigenere(plaintext, keyword):
+def encrypt_vigenere(plaintext : str, keyword : str):
     """Encrypt plaintext using a Vigenere cipher with a keyword.
 
     Add more implementation details here.
     """
-    raise NotImplementedError  # Your implementation here
+    keyword = keyword.upper()
+    ciphertext = ''
+    for i, ch in enumerate(plaintext):
+        if ch.isalpha():
+            ch = ch.upper()
+            shift_value = ord(keyword[i % len(keyword)]) - ord('A')
+            ciphertext += shift_right(ch, shift_value)
+        else:
+            ciphertext += ch
+    return ciphertext
 
 
-def decrypt_vigenere(ciphertext, keyword):
+def decrypt_vigenere(ciphertext : str, keyword : str):
     """Decrypt ciphertext using a Vigenere cipher with a keyword.
 
     Add more implementation details here.
     """
-    raise NotImplementedError  # Your implementation here
+    plaintext = ''
+    for i, ch in enumerate(ciphertext):
+        if ch.isalpha():
+            ch = ch.upper()
+            shift_value = ord(keyword[i % len(keyword)]) - ord('A')
+            plaintext += shift_left(ch, shift_value)
+        else:
+            plaintext += ch
+    return plaintext
 
 
 # Merkle-Hellman Knapsack Cryptosystem

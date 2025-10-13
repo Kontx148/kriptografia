@@ -64,3 +64,15 @@ def bits_to_byte(bits):
         if bit:
             byte += 1
     return byte
+
+def shift_right(ch : str, n : int) -> str:
+    """
+    Function that shifts a char from 'A' to 'Z' right by n places
+    """
+    return chr((ord(ch) + n - ord('A')) % 26 + ord('A'))
+
+def shift_left(ch : str, n : int) -> str:
+    """
+    Function that shifts a char from 'A' to 'Z' left by n places
+    """
+    return chr((ord(ch) - n - ord('A')) % 26 + ord('A'))
