@@ -13,12 +13,20 @@ import utils
 
 # Caesar Cipher
 
-def encrypt_caesar(plaintext):
+def encrypt_caesar(plaintext : str):
     """Encrypt plaintext using a Caesar cipher.
 
     Add more implementation details here.
     """
-    raise NotImplementedError  # Your implementation here
+    ciphertext = ''
+    for ch in plaintext:
+        # Assume char is uppercase
+        if ch.isalpha():
+            ch = ch.upper()
+            ciphertext += chr((ord(ch) + 3 - ord('A')) % 26 + ord('A'))
+        else:
+            ciphertext += ch
+    return ciphertext
 
 
 def decrypt_caesar(ciphertext):
@@ -26,7 +34,15 @@ def decrypt_caesar(ciphertext):
 
     Add more implementation details here.
     """
-    raise NotImplementedError  # Your implementation here
+    plaintext = ''
+    for ch in ciphertext:
+        # Assume char is uppercase
+        if ch.isalpha():
+            ch = ch.upper()
+            plaintext += chr((ord(ch) - 3 - ord('A')) % 26 + ord('A'))
+        else:
+            plaintext += ch
+    return plaintext
 
 
 # Vigenere Cipher
