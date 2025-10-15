@@ -9,7 +9,9 @@ SUNet: <SUNet ID>
 
 Replace this with a description of the program.
 """
-import utils
+import math
+from typing import List, Tuple
+
 from lab1.utils import shift_right, shift_left
 
 
@@ -160,4 +162,167 @@ def decrypt_mh(message, private_key):
     @return bytearray or str of decrypted characters
     """
     raise NotImplementedError  # Your implementation here
+
+# Scytale Cipher
+def encrypt_scytale(plaintext : str, circumference : int):
+    """
+    Encrypt plaintext using a Scytale cipher with a circumference.
+    """
+    ciphertext = ''
+    for i in range(circumference):
+        for j in range(i, len(plaintext), circumference):
+            ciphertext += plaintext[j]
+    return ciphertext
+
+
+def decrypt_scytale(ciphertext : str, circumference : int):
+    """
+    Decrypt ciphertext using a Scytale cipher with a circumference.
+    """
+    plaintext = ''
+    # Get the base length i.e., each rows length
+    base = math.ceil(len(ciphertext) / circumference)
+    extra = len(ciphertext) % circumference
+
+    # Get the shift list -> by how much do we need to shift each row to get to the next
+    shift_list = [0]
+    for i in range(1, circumference):
+        if i > extra and extra:
+            shift_list.append(shift_list[i - 1] + base - 1)
+        else:
+            shift_list.append(shift_list[i - 1] + base)
+
+    # Loop through each column
+    for i in range(base):
+        # In the last column, we only need to extra number of characters
+        if i == base - 1 and extra:
+            shift_list = shift_list[:extra]
+
+        for shift in shift_list:
+            if shift + i >= len(ciphertext):
+                continue
+            plaintext += ciphertext[shift + i]
+    return plaintext
+
+# Rail fence Cipher
+
+def get_gaps(rails : int) -> Tuple[int, List[Tuple[int, int]]]:
+    gap_length = 2 * (rails - 1)
+    gap_list = [(i, gap_length - i) for i in range(gap_length, -1, -2)]
+    gap_list[0] = (gap_length, gap_length)
+    gap_list[-1] = (gap_length, gap_length)
+    return gap_length, gap_list
+
+def extra_on_rail(given_rail : int, rails : int, extra : int) -> int:
+    """
+    Returns the extra number of characters on the given rail, given outside the fixed periods
+
+    :param given_rail: The rail number between 0 and rails - 1
+    :param rails: The number of rails
+    :param extra: The extra number of characters
+    """
+    match given_rail:
+        # Upper
+        case 0:
+            return 1 if extra else 0
+        # Lower
+        case _ if given_rail == rails - 1:
+            return 1 if extra >= rails else 0
+        # Left and right
+        case _:
+            if extra > given_rail:
+                if extra + given_rail >= 2 * rails - 1:
+                    return 2
+                else:
+                    return 1
+            else:
+                return 0
+
+
+def encrypt_rail_fence(plaintext : str, rails : int):
+    """
+    Encrypt plaintext using a Rail fence cipher with a rail size.
+    """
+    ciphertext = ''
+    gap_length, gap_list = get_gaps(rails)
+
+    for i in range(rails):
+        gap = gap_list[i]
+        current_index = i
+        gap_index = 0
+        while current_index < len(plaintext):
+            ciphertext += plaintext[current_index]
+            current_index += gap[gap_index]
+            gap_index = (gap_index + 1) % 2
+
+    return ciphertext
+
+def decrypt_rail_fence(ciphertext : str, rails : int):
+    """
+    Decrypt ciphertext using a Rail fence cipher with a rail size.
+    """
+    plaintext = ''
+    period_length = 2 * (rails - 1)
+    base = len(ciphertext) // period_length
+    extra = len(ciphertext) % period_length
+
+    # Period indexes
+    # 0
+    #  left        right
+    #        lower
+
+    upper = 0
+    lower = 0
+    left = []
+    right = []
+
+    # Fill the left and right indexes
+    for i in range(1, rails):
+        if i == 1:
+            shift_value = base + extra_on_rail(0, rails, extra)
+        else:
+            extra_shift = extra_on_rail(i - 1, rails, extra)
+            shift_value = 2 * base + left[-1] + extra_shift
+
+        # Compute the lower index
+        if i == rails - 1:
+            lower = shift_value
+        # Compute the left and right
+        else:
+            left.append(shift_value)
+            right.append(shift_value + 1)
+
+    # Fill in the fixed periods
+    for i in range(base):
+        plaintext += ciphertext[upper + i]
+
+        # Loop through the left side
+        for left_index in left:
+            plaintext += ciphertext[left_index + 2 * i]
+
+        # Add the lower
+        plaintext += ciphertext[lower + i]
+
+        # Loop through the right side
+        for right_index in right:
+            plaintext += ciphertext[right_index + 2 * i]
+
+    # Fill in the extra characters
+    for i in range(extra):
+        match i:
+            case 0:
+                plaintext += ciphertext[upper + base]
+            case _ if i == rails - 1:
+                plaintext += ciphertext[lower + base]
+            case _ if i < rails - 1:
+                plaintext += ciphertext[left[-1] + 2 * base]
+            case _:
+                plaintext += ciphertext[right[-1] + 2 * base]
+
+    return plaintext
+
+
+
+
+
 
