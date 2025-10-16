@@ -14,6 +14,15 @@ from typing import List, Tuple
 
 from lab1.utils import shift_right, shift_left
 
+# Clean input
+def clean_text(text):
+    # Keep only alphabetic characters and make them uppercase
+    cleaned = ''.join(ch.upper() for ch in text if ch.isalpha())
+
+    if not cleaned:
+        raise ValueError("Input must contain at least one char")
+
+    return cleaned
 
 # Caesar Cipher
 
@@ -22,6 +31,7 @@ def encrypt_caesar(plaintext : str):
 
     Add more implementation details here.
     """
+    plaintext = clean_text(plaintext)
     ciphertext = ''
     for ch in plaintext:
         if ch.isalpha():
@@ -37,6 +47,7 @@ def decrypt_caesar(ciphertext):
 
     Add more implementation details here.
     """
+    ciphertext = clean_text(ciphertext)
     plaintext = ''
     for ch in ciphertext:
         if ch.isalpha():
@@ -54,6 +65,8 @@ def encrypt_vigenere(plaintext : str, keyword : str):
 
     Add more implementation details here.
     """
+    plaintext = clean_text(plaintext)
+    keyword = clean_text(keyword)
     keyword = keyword.upper()
     ciphertext = ''
     for i, ch in enumerate(plaintext):
@@ -71,6 +84,8 @@ def decrypt_vigenere(ciphertext : str, keyword : str):
 
     Add more implementation details here.
     """
+    ciphertext = clean_text(ciphertext)
+    keyword = clean_text(keyword)
     plaintext = ''
     for i, ch in enumerate(ciphertext):
         if ch.isalpha():
@@ -168,6 +183,7 @@ def encrypt_scytale(plaintext : str, circumference : int):
     """
     Encrypt plaintext using a Scytale cipher with a circumference.
     """
+    plaintext = clean_text(plaintext)
     ciphertext = ''
     for i in range(circumference):
         for j in range(i, len(plaintext), circumference):
@@ -179,6 +195,7 @@ def decrypt_scytale(ciphertext : str, circumference : int):
     """
     Decrypt ciphertext using a Scytale cipher with a circumference.
     """
+    ciphertext = clean_text(ciphertext)
     plaintext = ''
     # Get the base length i.e., each rows length
     base = math.ceil(len(ciphertext) / circumference)
@@ -243,6 +260,7 @@ def encrypt_rail_fence(plaintext : str, rails : int):
     """
     Encrypt plaintext using a Rail fence cipher with a rail size.
     """
+    plaintext = clean_text(plaintext)
     ciphertext = ''
     gap_length, gap_list = get_gaps(rails)
 
@@ -261,6 +279,7 @@ def decrypt_rail_fence(ciphertext : str, rails : int):
     """
     Decrypt ciphertext using a Rail fence cipher with a rail size.
     """
+    ciphertext = clean_text(ciphertext)
     plaintext = ''
     period_length = 2 * (rails - 1)
     base = len(ciphertext) // period_length
