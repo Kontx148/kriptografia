@@ -57,6 +57,14 @@ def decrypt_caesar(ciphertext):
             plaintext += ch
     return plaintext
 
+def encrypt_caesar_bytes(data: bytes, shift: int = 3) -> bytes:
+    """Encrypt bytes using a Caesar cipher"""
+    return bytes((b + shift) % 256 for b in data)
+
+
+def decrypt_caesar_bytes(data: bytes, shift: int = 3) -> bytes:
+    """Decrypt bytes using a Caesar cipher."""
+    return bytes((b - shift) % 256 for b in data)
 
 # Vigenere Cipher
 
@@ -96,6 +104,18 @@ def decrypt_vigenere(ciphertext : str, keyword : str):
             plaintext += ch
     return plaintext
 
+def encrypt_vigenere_bytes(data: bytes, keyword: str) -> bytes:
+    """Encrypt bytes using a Vigenere cipher with a keyword."""
+    keyword = keyword.encode()
+    key_len = len(keyword)
+    return bytes((data[i] + keyword[i % key_len]) % 256 for i in range(len(data)))
+
+
+def decrypt_vigenere_bytes(data: bytes, keyword: str) -> bytes:
+    """Decrypt bytes using a Vigenere cipher with a keyword."""
+    keyword = keyword.encode()
+    key_len = len(keyword)
+    return bytes((data[i] - keyword[i % key_len]) % 256 for i in range(len(data)))
 
 # Merkle-Hellman Knapsack Cryptosystem
 

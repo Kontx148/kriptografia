@@ -9,8 +9,8 @@ If you are a student, you shouldn't need to change anything in this file.
 """
 import random
 
-from crypto import (encrypt_caesar, decrypt_caesar,
-                    encrypt_vigenere, decrypt_vigenere,
+from crypto import (encrypt_caesar, decrypt_caesar, encrypt_caesar_bytes, decrypt_caesar_bytes,
+                    encrypt_vigenere, decrypt_vigenere, encrypt_vigenere_bytes, decrypt_vigenere_bytes,
                     encrypt_scytale, decrypt_scytale,
                     encrypt_rail_fence, decrypt_rail_fence,
                     generate_private_key, create_public_key,
@@ -120,29 +120,45 @@ def input_number(prompt):
 def run_caesar():
     action = get_action()
     encrypting = action == 'E'
-    data = clean_caesar(get_input(binary=False))
+    # Ask for a binary format
+    binary = get_yes_or_no("Working with binary format?")
+    if binary:
+        data = get_input(binary)
+    else:
+        data = clean_caesar(get_input(binary))
 
     print("* Transform *")
     print("{}crypting {} using Caesar cipher...".format('En' if encrypting else 'De', data))
 
-    output = (encrypt_caesar if encrypting else decrypt_caesar)(data)
+    if binary:
+        output = (encrypt_caesar_bytes if encrypting else decrypt_caesar_bytes)(data)
+    else:
+        output = (encrypt_caesar if encrypting else decrypt_caesar)(data)
 
-    set_output(output)
+    set_output(output, binary)
 
 
 def run_vigenere():
     action = get_action()
     encrypting = action == 'E'
-    data = clean_vigenere(get_input(binary=False))
+    # Ask for a binary format
+    binary = get_yes_or_no("Working with binary format?")
+    if binary:
+        data = get_input(binary)
+    else:
+        data = clean_vigenere(get_input(binary))
 
     print("* Transform *")
     keyword = clean_vigenere(input("Keyword? "))
 
     print("{}crypting {} using Vigenere cipher and keyword {}...".format('En' if encrypting else 'De', data, keyword))
 
-    output = (encrypt_vigenere if encrypting else decrypt_vigenere)(data, keyword)
+    if binary:
+        output = (encrypt_vigenere_bytes if encrypting else decrypt_vigenere_bytes)(data, keyword)
+    else:
+        output = (encrypt_vigenere if encrypting else decrypt_vigenere)(data, keyword)
 
-    set_output(output)
+    set_output(output, binary)
 
 def run_scytale():
     action = get_action()
