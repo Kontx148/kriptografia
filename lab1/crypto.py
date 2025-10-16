@@ -26,7 +26,7 @@ def clean_text(text):
 
 # Caesar Cipher
 
-def encrypt_caesar(plaintext : str):
+def encrypt_caesar(plaintext : str, shift : int = 3):
     """Encrypt plaintext using a Caesar cipher.
 
     Add more implementation details here.
@@ -36,13 +36,13 @@ def encrypt_caesar(plaintext : str):
     for ch in plaintext:
         if ch.isalpha():
             ch = ch.upper()
-            ciphertext += shift_right(ch, 3)
+            ciphertext += shift_right(ch, shift)
         else:
             ciphertext += ch
     return ciphertext
 
 
-def decrypt_caesar(ciphertext):
+def decrypt_caesar(ciphertext : str, shift : int = 3):
     """Decrypt a ciphertext using a Caesar cipher.
 
     Add more implementation details here.
@@ -52,7 +52,7 @@ def decrypt_caesar(ciphertext):
     for ch in ciphertext:
         if ch.isalpha():
             ch = ch.upper()
-            plaintext += shift_left(ch, 3)
+            plaintext += shift_left(ch, shift)
         else:
             plaintext += ch
     return plaintext

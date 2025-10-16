@@ -6,9 +6,16 @@ In 1-3 sentences per section, comment on your approach to each of the parts of t
 
 # Caesar Cipher
 
+For the Caesar cipher, I looped through each character of the input, applied a shift based on the given value, and wrapped around the alphabet as needed. Decryption simply reverses the shift. I used helper functions (shift_right and shift_left) to keep the code clean and reusable. For binary data, I extended the same logic to all byte values using modulo 256
 
 # Vigenere Cipher
 
+For the Vigenère cipher, I iterated through the input and shifted each character according to the corresponding character in the keyword, repeating the keyword as necessary. Decryption reverses each shift using the same keyword. For binary data, I converted the keyword to bytes and applied the shifts modulo 256, allowing encryption of arbitrary binary files.
 
-# Merkle-Hellman Knapsack Cryptosystem
+# Scytale Cipher
 
+For the Scytale cipher, I mapped the plaintext into rows according to the specified circumference and then read the columns to produce the ciphertext. Decryption reconstructs the original layout and reads row by row
+
+# Rail fence Cipher
+
+For the Rail Fence cipher, I calculated the periodic pattern of each rail and iterated through the plaintext to place characters accordingly. Decryption reverses the process by calculating the positions of characters on each rail and reconstructing the original sequence
