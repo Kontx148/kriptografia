@@ -10,14 +10,20 @@ SUNet: <SUNet ID>
 Replace this with a description of the program.
 """
 import math
-from typing import List, Tuple
+import re
+from typing import List, Tuple, Set
 
 from lab1.utils import shift_right, shift_left
 
 # Clean input
 def clean_text(text):
     # Keep only alphabetic characters and make them uppercase
-    cleaned = ''.join(ch.upper() for ch in text if ch.isalpha())
+    cleaned = ""
+    for ch in text:
+        if ch.isalpha():
+            cleaned += ch.upper()
+        else:
+            cleaned += ch
 
     if not cleaned:
         raise ValueError("Input must contain at least one char")
@@ -306,9 +312,9 @@ def decrypt_rail_fence(ciphertext : str, rails : int):
     extra = len(ciphertext) % period_length
 
     # Period indexes
-    # 0
-    #  left        right
-    #        lower
+    # 0____________________
+    # _left___________right
+    #________lower_________
 
     upper = 0
     lower = 0
@@ -359,6 +365,58 @@ def decrypt_rail_fence(ciphertext : str, rails : int):
                 plaintext += ciphertext[right[-1] + 2 * base]
 
     return plaintext
+
+# Intelligent Codebreaker
+
+def read_dict() -> Tuple[set, set]:
+    """
+    Reads the possible words and whitespaces from the dictionary file
+    """
+    with open("dict/words.txt") as f:
+        words = set(f.read().upper().splitlines())
+
+    # with open("dict/whitespaces.txt") as f:
+    #     whitespaces = set(f.read().lower().splitlines())
+
+    whitespaces = {" ", ".", ",", "!", "?", ";", ":", "'", '"', "-", "—", "(", ")", "[", "]", "{", "}", "/", "\\", "@",
+                   "#", "$", "%", "&", "*", "+", "=", "<", ">", "_", "^"}
+    return words, whitespaces
+
+
+def split_by_whitespaces(text: str, whitespaces: Set[str]) -> list[str]:
+    """
+    Splits the text by any character in the whitespaces set
+    """
+    # Escape all characters so they are treated literally in regex
+    pattern = "[" + re.escape("".join(whitespaces)) + "]+"
+    return [t for t in re.split(pattern, text) if t]
+
+
+def intelligent_codebreaker(ciphertext):
+    """
+    Decipher the encoded vigenere using the intelligent codebreaker
+    """
+    words, whitespaces = read_dict()
+    best_key = None
+    best_score = 0
+
+    for test_key in words:
+        ciphered_vigenere = decrypt_vigenere(ciphertext, test_key)
+        ciphered_words = split_by_whitespaces(ciphered_vigenere, whitespaces)
+
+        current_score = 0
+        for ciphered_word in ciphered_words:
+            if ciphered_word in words:
+                current_score += 1
+        if current_score > best_score:
+            best_score = current_score
+            best_key = test_key
+
+    return best_key
+
+
+
+
 
 
 
