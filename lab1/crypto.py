@@ -288,6 +288,10 @@ def encrypt_rail_fence(plaintext : str, rails : int):
     """
     plaintext = clean_text(plaintext)
     ciphertext = ''
+
+    if rails <= 1:
+        return plaintext
+
     gap_length, gap_list = get_gaps(rails)
 
     for i in range(rails):
@@ -307,6 +311,10 @@ def decrypt_rail_fence(ciphertext : str, rails : int):
     """
     ciphertext = clean_text(ciphertext)
     plaintext = ''
+
+    if rails <= 1:
+        return ciphertext
+
     period_length = 2 * (rails - 1)
     base = len(ciphertext) // period_length
     extra = len(ciphertext) % period_length
@@ -337,6 +345,8 @@ def decrypt_rail_fence(ciphertext : str, rails : int):
             left.append(shift_value)
             right.append(shift_value + 1)
 
+    # Flip the right indexes
+    right = right[::-1]
     # Fill in the fixed periods
     for i in range(base):
         plaintext += ciphertext[upper + i]
@@ -360,9 +370,9 @@ def decrypt_rail_fence(ciphertext : str, rails : int):
             case _ if i == rails - 1:
                 plaintext += ciphertext[lower + base]
             case _ if i < rails - 1:
-                plaintext += ciphertext[left[-1] + 2 * base]
+                plaintext += ciphertext[left[i-1] + 2 * base]
             case _:
-                plaintext += ciphertext[right[-1] + 2 * base]
+                plaintext += ciphertext[right[i-rails] + 2 * base]
 
     return plaintext
 
