@@ -33,15 +33,13 @@ def clean_text(text):
 # Caesar Cipher
 
 def encrypt_caesar(plaintext : str, shift : int = 3):
-    """Encrypt plaintext using a Caesar cipher.
-
-    Add more implementation details here.
+    """
+    Encrypt plaintext using a Caesar cipher.
     """
     plaintext = clean_text(plaintext)
     ciphertext = ''
     for ch in plaintext:
         if ch.isalpha():
-            ch = ch.upper()
             ciphertext += shift_right(ch, shift)
         else:
             ciphertext += ch
@@ -49,15 +47,13 @@ def encrypt_caesar(plaintext : str, shift : int = 3):
 
 
 def decrypt_caesar(ciphertext : str, shift : int = 3):
-    """Decrypt a ciphertext using a Caesar cipher.
-
-    Add more implementation details here.
+    """
+    Decrypt a ciphertext using a Caesar cipher.
     """
     ciphertext = clean_text(ciphertext)
     plaintext = ''
     for ch in ciphertext:
         if ch.isalpha():
-            ch = ch.upper()
             plaintext += shift_left(ch, shift)
         else:
             plaintext += ch
@@ -75,17 +71,14 @@ def decrypt_caesar_bytes(data: bytes, shift: int = 3) -> bytes:
 # Vigenere Cipher
 
 def encrypt_vigenere(plaintext : str, keyword : str):
-    """Encrypt plaintext using a Vigenere cipher with a keyword.
-
-    Add more implementation details here.
+    """
+    Encrypt plaintext using a Vigenere cipher with a keyword.
     """
     plaintext = clean_text(plaintext)
     keyword = clean_text(keyword)
-    keyword = keyword.upper()
     ciphertext = ''
     for i, ch in enumerate(plaintext):
         if ch.isalpha():
-            ch = ch.upper()
             shift_value = ord(keyword[i % len(keyword)]) - ord('A')
             ciphertext += shift_right(ch, shift_value)
         else:
@@ -94,16 +87,14 @@ def encrypt_vigenere(plaintext : str, keyword : str):
 
 
 def decrypt_vigenere(ciphertext : str, keyword : str):
-    """Decrypt ciphertext using a Vigenere cipher with a keyword.
-
-    Add more implementation details here.
+    """
+    Decrypt ciphertext using a Vigenere cipher with a keyword.
     """
     ciphertext = clean_text(ciphertext)
     keyword = clean_text(keyword)
     plaintext = ''
     for i, ch in enumerate(ciphertext):
         if ch.isalpha():
-            ch = ch.upper()
             shift_value = ord(keyword[i % len(keyword)]) - ord('A')
             plaintext += shift_left(ch, shift_value)
         else:
@@ -410,6 +401,8 @@ def intelligent_codebreaker(ciphertext):
     best_key = None
     best_score = 0
 
+    # Loop through all possible keys and count the number of recognized words
+    # Return the best deciphered text with the best key
     for test_key in words:
         ciphered_vigenere = decrypt_vigenere(ciphertext, test_key)
         ciphered_words = split_by_whitespaces(ciphered_vigenere, whitespaces)
@@ -422,7 +415,10 @@ def intelligent_codebreaker(ciphertext):
             best_score = current_score
             best_key = test_key
 
-    return best_key
+    if best_key:
+        return decrypt_vigenere(ciphertext, best_key)
+    else:
+        return None
 
 
 
