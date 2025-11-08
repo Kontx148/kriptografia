@@ -1,7 +1,7 @@
 {
-  "block_length": 8,
+  "block_length": 64,
   "key": "asd",
-  "iv": "asd",
-  "mode": "CBC",
-  "padding": "zero"
+  "iv": "3",
+  "mode": "CTR",
+  "padding": "des"
 }

@@ -17,12 +17,8 @@ class PaddingMode(str, Enum):
 # Helper function
 def xor(a: bytes, b: bytes) -> bytes:
     if len(a) != len(b):
-        raise ValueError("Cannot xor non-equal length bytes")
-
-    result = bytearray(a)
-    for i, byte in enumerate(b):
-        result[i] ^= b
-    return bytes(result)
+        raise ValueError("Cannot XOR non-equal length byte sequences")
+    return bytes(x ^ y for x, y in zip(a, b))
 
 class BlockCipher:
     block_length : int
@@ -30,7 +26,7 @@ class BlockCipher:
     encrypting_algorithm : Callable
     decryption_algorithm : Callable
     key : str
-    iv : str | None
+    iv : bytes | None
     padding_mode : PaddingMode
 
     def __init__(self, block_length : int, key : str, iv : str | None, mode : CipherMode, padding_mode : PaddingMode, encrypting_algorithm : Callable, decryption_algorithm : Callable):
@@ -48,11 +44,10 @@ class BlockCipher:
         block_length = block_length // 8
 
         # Initial vector initialization
-        if iv:
-            if mode != CipherMode.CTR and len(iv) != block_length:
-                raise ValueError("IV length must be equal to block length")
-        else :
-            iv = "0" * block_length
+        iv = (iv or "0" * block_length).encode()
+
+        if mode != CipherMode.CTR and len(iv) != block_length:
+            raise ValueError("IV length must match block length")
 
         self.block_length = block_length
         self.key = key
@@ -73,12 +68,19 @@ class BlockCipher:
         padding_mode = PaddingMode(config["padding"])
         return cls(block_length, key, iv, mode, padding_mode, encrypting_algorithm, decryption_algorithm)
 
+    def __pad_len(self, data: bytes) -> int:
+        """
+        Returns the length of padding needed to pad data to the block size
+        """
+        block_size = self.block_length
+        pad_len = block_size - (len(data) % block_size)
+        return pad_len
+
     def pad(self, data: bytes) -> bytes:
         """
         Pads data based on block length and padding mode
         """
-        block_size = self.block_length
-        pad_len = block_size - (len(data) % block_size)
+        pad_len = self.__pad_len(data)
 
         match self.padding_mode:
             case PaddingMode.ZERO:
@@ -91,6 +93,31 @@ class BlockCipher:
             case PaddingMode.SF:
                 # Schneier-Ferguson padding 'n' * n
                 return data + bytes([pad_len]) * pad_len
+            case _:
+                raise ValueError("Invalid padding mode")
+
+    def depad(self, data: bytes) -> bytes:
+        """
+        Removes padding from data based on padding mode.
+        """
+        if not data:
+            raise ValueError("Cannot remove padding from empty data")
+
+        match self.padding_mode:
+            case PaddingMode.ZERO:
+                return data.rstrip(b"\x00")
+
+            case PaddingMode.DES:
+                index = data.rfind(b"\x80")
+                if index == -1:
+                    raise ValueError("Invalid DES padding: 0x80 marker not found")
+                return data[:index]
+
+            case PaddingMode.SF:
+                pad_len = data[-1]
+                if pad_len == 0 or pad_len > len(data):
+                    raise ValueError("Invalid SF padding: incorrect pad length.")
+                return data[:-pad_len]
             case _:
                 raise ValueError("Invalid padding mode")
 
@@ -126,7 +153,7 @@ class BlockCipher:
         """
         block_size = self.block_length
         encrypted_data = bytearray()
-        c_0 = self.iv.encode()
+        c_0 = self.iv
         for i in range(0, len(data), block_size):
             block = data[i:i+block_size]
             block = xor(block, c_0)
@@ -142,7 +169,7 @@ class BlockCipher:
         # Parallel
         block_size = self.block_length
         decrypted_data = bytearray()
-        c_0 = self.iv.encode()
+        c_0 = self.iv
         for i in range(0, len(data), block_size):
             block = data[i:i+block_size]
             decrypted_block = self.decryption_algorithm(block, self.key)
@@ -157,7 +184,7 @@ class BlockCipher:
         """
         block_size = self.block_length
         encrypted_data = bytearray()
-        c_0 = self.iv.encode()
+        c_0 = self.iv
         for i in range(0, len(data), block_size):
             block = data[i:i + block_size]
             c_0 = self.encrypting_algorithm(c_0, self.key)
@@ -172,12 +199,12 @@ class BlockCipher:
         # Parallel
         block_size = self.block_length
         decrypted_data = bytearray()
-        c_0 = self.iv.encode()
+        c_0 = self.iv
         for i in range(0, len(data), block_size):
             block = data[i:i + block_size]
-            c_0 = self.decryption_algorithm(c_0, self.key)
-            c_0 = xor(c_0, block)
-            decrypted_data.extend(c_0)
+            c_0 = self.encrypting_algorithm(c_0, self.key)
+            decrypted_block = xor(c_0, block)
+            decrypted_data.extend(decrypted_block)
             c_0 = block
         return decrypted_data
 
@@ -188,7 +215,7 @@ class BlockCipher:
         # Parallel
         block_size = self.block_length
         encrypted_data = bytearray()
-        c_0 = self.iv.encode()
+        c_0 = self.iv
         for i in range(0, len(data), block_size):
             block = data[i:i + block_size]
             c_0 = self.encrypting_algorithm(c_0, self.key)
@@ -203,20 +230,19 @@ class BlockCipher:
         # Parallel
         block_size = self.block_length
         decrypted_data = bytearray()
-        c_0 = self.iv.encode()
+        c_0 = self.iv
         for i in range(0, len(data), block_size):
             block = data[i:i + block_size]
             c_0 = self.encrypting_algorithm(c_0, self.key)
-            c_0 = xor(c_0, block)
-            decrypted_data.extend(c_0)
-            c_0 = block
+            block = xor(block, c_0)
+            decrypted_data.extend(block)
         return decrypted_data
 
     def __build_ctr_block(self, counter: int) -> bytes:
         """
         Builds a single CTR mode counter-block based on the counter
         """
-        iv = self.iv.encode()
+        iv = self.iv
         block_size = self.block_length
         n_size = len(iv)
         counter_size = block_size - n_size
@@ -255,7 +281,7 @@ class BlockCipher:
         for i in range(0, len(data), block_size):
             block = data[i:i + block_size]
             n_i = self.__build_ctr_block(i + 1)
-            decrypted_block = self.decryption_algorithm(n_i, self.key)
+            decrypted_block = self.encrypting_algorithm(n_i, self.key)
             decrypted_block = xor(decrypted_block, block)
             decrypted_data.extend(decrypted_block)
         return decrypted_data
@@ -282,20 +308,28 @@ class BlockCipher:
                 raise ValueError("Invalid mode")
 
 
-    def decrypt(self, data: bytes):
+    def decrypt(self, data: bytes, remove_padding : bool = True):
         """
         Block decryption based on the configuration
         """
+        decrypted_data = bytearray()
+
         match self.mode:
-            case CipherMode.CBC:
-                return self.__ecb_decrypt(data)
             case CipherMode.ECB:
-                return self.__ecb_decrypt(data)
+                decrypted_data = self.__ecb_decrypt(data)
+            case CipherMode.CBC:
+                decrypted_data = self.__cbc_decrypt(data)
             case CipherMode.CFB:
-                return self.__cfb_decrypt(data)
+                decrypted_data = self.__cfb_decrypt(data)
             case CipherMode.OFB:
-                return self.__ofb_decrypt(data)
+                decrypted_data = self.__ofb_decrypt(data)
             case CipherMode.CTR:
-                return self.__ctr_decrypt(data)
+                decrypted_data = self.__ctr_decrypt(data)
             case _:
                 raise ValueError("Invalid mode")
+
+        if remove_padding:
+            return self.depad(decrypted_data)
+        else:
+            return decrypted_data
+
