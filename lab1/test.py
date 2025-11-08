@@ -112,5 +112,5 @@ def test_intelligent_codebreaker():
         print("No key found")
 
 if __name__ == '__main__':
-    unittest.main(verbosity=2)
+    #unittest.main(verbosity=2)
     test_intelligent_codebreaker()

@@ -1,0 +1,7 @@
+{
+  "block_length": 8,
+  "key": "asd",
+  "iv": "asd",
+  "mode": "CBC",
+  "padding": "zero"
+}
