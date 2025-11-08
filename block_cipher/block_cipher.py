@@ -43,19 +43,42 @@ class BlockCipher:
             raise ValueError("Block length must be a multiple of 8")
         block_length = block_length // 8
 
-        # Initial vector initialization
-        iv = (iv or "0" * block_length).encode()
-
-        if mode != CipherMode.CTR and len(iv) != block_length:
-            raise ValueError("IV length must match block length")
-
         self.block_length = block_length
         self.key = key
-        self.iv = iv
         self.mode = mode
+        self.iv = iv
         self.padding_mode = padding_mode
         self.encrypting_algorithm = encrypting_algorithm
         self.decryption_algorithm = decryption_algorithm
+        self.applied_padding = False
+
+    @property
+    def mode(self):
+        return self._mode
+
+    @mode.setter
+    def mode(self, value: CipherMode):
+        if not isinstance(value, CipherMode):
+            raise ValueError("Mode must be a CipherMode enum")
+        self._mode = value
+
+    @property
+    def iv(self):
+        return self._iv
+
+    @iv.setter
+    def iv(self, value: str | bytes | None):
+        if value is None:
+            value = b"0" * self.block_length
+        elif isinstance(value, str):
+            value = value.encode()
+        elif not isinstance(value, bytes):
+            raise ValueError("IV must be bytes, str, or None")
+
+        if self.mode != CipherMode.CTR and len(value) != self.block_length:
+            raise ValueError(f"IV length must match block length ({self.block_length} bytes)")
+
+        self._iv = value
 
     @classmethod
     def from_config(cls, file_path: str, encrypting_algorithm : Callable, decryption_algorithm : Callable):
@@ -108,10 +131,13 @@ class BlockCipher:
                 return data.rstrip(b"\x00")
 
             case PaddingMode.DES:
-                index = data.rfind(b"\x80")
-                if index == -1:
-                    raise ValueError("Invalid DES padding: 0x80 marker not found")
-                return data[:index]
+                i = len(data) - 1
+                while i >= 0 and data[i] == 0x00:
+                    i -= 1
+                if i < 0 or data[i] != 0x80:
+                    raise ValueError("Invalid DES padding")
+
+                return data[:i]
 
             case PaddingMode.SF:
                 pad_len = data[-1]
@@ -290,8 +316,14 @@ class BlockCipher:
         """
         Block encryption based on the configuration
         """
+        # print("--- RAW DATA (last 32 bytes) ---")
+        # print(data[-2*self.block_length:].hex())
+        # print("---------------------------------------")
+        # print(len(data))
+
         if len(data) % self.block_length != 0:
             data = self.pad(data)
+            self.applied_padding = True
 
         match self.mode:
             case CipherMode.ECB:
@@ -308,7 +340,7 @@ class BlockCipher:
                 raise ValueError("Invalid mode")
 
 
-    def decrypt(self, data: bytes, remove_padding : bool = True):
+    def decrypt(self, data: bytes, remove_padding : bool = True) -> bytes:
         """
         Block decryption based on the configuration
         """
@@ -328,8 +360,9 @@ class BlockCipher:
             case _:
                 raise ValueError("Invalid mode")
 
-        if remove_padding:
-            return self.depad(decrypted_data)
+        # Convert the final result to bytes from bytearray
+        if remove_padding and self.applied_padding:
+            return bytes(self.depad(decrypted_data))
         else:
-            return decrypted_data
+            return bytes(decrypted_data)
 
