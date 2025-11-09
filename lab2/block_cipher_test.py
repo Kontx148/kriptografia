@@ -22,7 +22,7 @@ class EncryptUnitTests(unittest.TestCase):
     # Hook method for setting up the test fixture before exercising it
     def setUp(self):
         config_file_path = "block_cipher/config.json"
-        binary_file_path = "lab2/data_tiny.bin"
+        binary_file_path = "lab2/data.bin"
         self.block_cipher_vigenere = BlockCipher.from_config(config_file_path, encrypt_vigenere_bytes, decrypt_vigenere_bytes)
         self.block_cipher_aes = BlockCipher.from_config(config_file_path, encrypt_aes_bytes, decrypt_aes_bytes)
         self.binary_file_path = binary_file_path
