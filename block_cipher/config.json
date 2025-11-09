@@ -1,7 +1,7 @@
 {
-  "block_length": 144,
-  "key": "asd",
-  "iv": "3s6h4f9mh01d5j890f",
-  "mode": "CTR",
+  "block_length": 128,
+  "key": "asdfghjklmnbvcxs",
+  "iv": "3s6h4f9mh01d5j89",
+  "mode": "CBC",
   "padding": "sf"
 }

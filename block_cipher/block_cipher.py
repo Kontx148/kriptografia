@@ -321,7 +321,7 @@ class BlockCipher:
         # print("---------------------------------------")
         # print(len(data))
 
-        if len(data) % self.block_length != 0:
+        if len(data) % self.block_length != 0 :
             data = self.pad(data)
             self.applied_padding = True
 
