@@ -1,3 +1,5 @@
+from config import DEFAULT_PORT
+
 from socket import *
 from threading import Thread
 import logging
@@ -6,10 +8,9 @@ class KeyServer:
     def __init__(self):
         self.keys = {}
 
-serverPort = 12000
 serverSocket = socket(AF_INET, SOCK_STREAM)
 serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-serverSocket.bind(('', serverPort))
+serverSocket.bind(('', DEFAULT_PORT))
 serverSocket.listen(1)
 
 logging.basicConfig(format='[%(threadName)s] %(asctime)s %(message)s', level=logging.INFO)
@@ -53,8 +54,15 @@ def client_handler(cs: socket):
                 toLoop = False
                 break
 
+            logger.info(f'Received request: {request}')
+            resource = request.upper().encode()
+            cs.send(resource)
+            toLoop = False
+
         if not toLoop:
             break
+
+
     cs.close()
     logger.info('Connection closed')
 
