@@ -6,10 +6,10 @@ from block_cipher.block_cipher import PaddingMode
 DEFAULT_HOST = 'localhost'
 DEFAULT_PORT = 12000
 
-BLOCK_CIPHER_PADDING = PaddingMode.SF
+BLOCK_CIPHER_PADDING = PaddingMode.DES
 
 BLOCK_CIPHER_LIST_1 = ['AES CBC', 'AES ECB', 'AES CFB', 'AES OFB', 'VIG CBC', 'VIG ECB', 'VIG CFB', 'VIG OFB']
-BLOCK_CIPHER_LIST_2 = ['VIG OFB']
+BLOCK_CIPHER_LIST_2 = ['VIG CBC']
 
 def encode_public_key(key: RSAPublicKey) -> bytes:
     public_bytes = key.public_bytes(

@@ -3,20 +3,7 @@ from socket import socket
 from typing import Any
 
 from block_cipher.block_cipher import *
-
 from Crypto.Cipher import AES
-
-IV = b'\x9f\x3a\x7c\x12\xe4\x56\xab\x90\xcd\x21\x88\xfe\x47\x6b\x11\xde'
-
-def encrypt_aes_bytes(data: bytes, key: str, mode=AES.MODE_CBC) -> bytes:
-    key = key.encode()
-    cipher = AES.new(key, mode, iv=IV)
-    return cipher.encrypt(data)
-
-def decrypt_aes_bytes(data: bytes, key: str, mode=AES.MODE_CBC) -> bytes:
-    key = key.encode()
-    cipher = AES.new(key, mode, iv=IV)
-    return cipher.decrypt(data)
 
 # Block Cipher config file path
 
@@ -152,5 +139,19 @@ def send_response_dto(dto: ResponseDTO, socket_to_send : socket):
     payload = dto.to_bytes()
     length = len(payload).to_bytes(4, 'big')
     socket_to_send.sendall(length + payload)
+
+# AES Encryption/Decryption
+
+IV = b'\x9f\x3a\x7c\x12\xe4\x56\xab\x90\xcd\x21\x88\xfe\x47\x6b\x11\xde'
+
+def encrypt_aes_bytes(data: bytes, key: str, mode=AES.MODE_CBC) -> bytes:
+    key = key.encode()
+    cipher = AES.new(key, mode, iv=IV)
+    return cipher.encrypt(data)
+
+def decrypt_aes_bytes(data: bytes, key: str, mode=AES.MODE_CBC) -> bytes:
+    key = key.encode()
+    cipher = AES.new(key, mode, iv=IV)
+    return cipher.decrypt(data)
 
 
