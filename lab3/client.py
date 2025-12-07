@@ -12,14 +12,15 @@ import logging
 from cryptography.hazmat.primitives.serialization import load_pem_public_key, load_der_public_key, load_pem_private_key
 
 from block_cipher.block_cipher import BlockCipher, CipherMode, PaddingMode
-from lab3.common import encode_public_key, decode_public_key
+from lab1.crypto import encrypt_vigenere_bytes, decrypt_vigenere_bytes
+from lab3.common import encode_public_key, decode_public_key, BLOCK_CIPHER_PADDING, BLOCK_CIPHER_LIST_2, \
+    BLOCK_CIPHER_LIST_1
 from common import DEFAULT_PORT, DEFAULT_HOST
 from lab3.comm_utils import recv_transfer_dto, recv_response_dto, TransferDTO, ActionMode, ResponseDTO, \
     send_transfer_dto, send_response_dto, BLOCK_CIPHER_CONFIG_PATH, encrypt_aes_bytes, decrypt_aes_bytes
 
 logging.basicConfig(format='[%(threadName)s] %(asctime)s %(message)s', level=logging.INFO)
 logger = logging.getLogger()
-
 
 def generate_rsa_key_pair() -> Tuple[RSAPrivateKey, RSAPublicKey]:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -274,7 +275,7 @@ class Client:
 
     def handle_first_peer_communication(self, peer_port: int):
         # Fixed block cipher list
-        block_cipher_list_1 = ['AES CBC', 'AES ECB', 'AES CFB', 'AES OFB', 'VIG CBC', 'VIG ECB', 'VIG CFB', 'VIG OFB']
+        block_cipher_list_1 = BLOCK_CIPHER_LIST_1
 
         listener_socket = self.open_listener_socket()
 
@@ -309,8 +310,17 @@ class Client:
         # Waiting for the block cipher list from a client
         block_cipher_list_2 = self.receive_block_cipher(conn, self.private_key)
 
-        # Init blockcipher
-        BlockCipher.from_config(BLOCK_CIPHER_CONFIG_PATH, encrypt_aes_bytes, decrypt_aes_bytes)
+        # Find the first matching element in the lists
+        common_cipher = None
+        for cipher in block_cipher_list_1:
+            if cipher in block_cipher_list_2:
+                common_cipher = cipher
+                break
+
+        if common_cipher is None:
+            logger.error("No common block cipher found between clients")
+            return
+        logger.info("Common block cipher found : " + common_cipher)
 
         # Generate half secret
         key1 = self.request_half_key()
@@ -328,7 +338,7 @@ class Client:
 
         # Save the shared key and init blockCipher
         self.shared_key = shared
-        self._init_block_cipher_with_shared_key()
+        self._init_block_cipher_with_shared_key(common_cipher)
 
         # Start a chat loop (initiator sends first)
         self.chat_loop_initiator(peer_socket, conn)
@@ -337,7 +347,7 @@ class Client:
 
     def handle_second_peer_communication(self):
         # Fixed block cipher list
-        block_cipher_list_2 = ['AES CBC', 'AES ECB', 'AES CFB', 'AES OFB', 'VIG CBC', 'VIG ECB', 'VIG CFB', 'VIG OFB']
+        block_cipher_list_2 = BLOCK_CIPHER_LIST_2
 
         listener_socket = self.open_listener_socket()
 
@@ -383,8 +393,17 @@ class Client:
         # Send a block cipher list to peer
         self.send_block_cipher(block_cipher_list_2, client1_public_key, peer_socket)
 
-        # Init blockcipher
-        BlockCipher.from_config(BLOCK_CIPHER_CONFIG_PATH, encrypt_aes_bytes, decrypt_aes_bytes)
+        # Find the first matching element in the lists
+        common_cipher = None
+        for cipher in block_cipher_list_1:
+            if cipher in block_cipher_list_2:
+                common_cipher = cipher
+                break
+
+        if common_cipher is None:
+            logger.error("No common block cipher found between clients")
+            return
+        logger.info("Common block cipher found : " + common_cipher)
 
         # Generate half secret
         key2 = self.request_half_key()
@@ -400,15 +419,16 @@ class Client:
         logger.info("Successfully created common key : " + shared.hex())
 
         # Save the shared key and init blockCipher
+
         self.shared_key = shared
-        self._init_block_cipher_with_shared_key()
+        self._init_block_cipher_with_shared_key(common_cipher)
 
         # Start a chat loop (receiver waits for the first message)
         self.chat_loop_receiver(peer_socket, conn)
         listener_socket.close()
         return
 
-    def _init_block_cipher_with_shared_key(self):
+    def _init_block_cipher_with_shared_key(self, common_cipher: str):
         """
         Initialize self.block_cipher using self.shared_key as a string key.
         Truncates/pads the hex string to exactly 16 characters
@@ -425,16 +445,30 @@ class Client:
             key_str = key_str.ljust(16, '0')
         key_str = key_str[:16]
 
-        self.block_cipher = BlockCipher(
-            len(key_str) * 8,
-            key_str,
-            None,
-            CipherMode.CBC,
-            PaddingMode.SF,
-            encrypt_aes_bytes,
-            decrypt_aes_bytes
-        )
-
+        match common_cipher:
+            case "AES CBC":
+                self.block_cipher = BlockCipher(len(key_str) * 8, key_str, None, CipherMode.CBC,BLOCK_CIPHER_PADDING, encrypt_aes_bytes, decrypt_aes_bytes, )
+            case "AES ECB":
+                self.block_cipher = BlockCipher(len(key_str) * 8, key_str, None, CipherMode.ECB, BLOCK_CIPHER_PADDING,
+                                        encrypt_aes_bytes, decrypt_aes_bytes, )
+            case "AES CFB":
+                self.block_cipher = BlockCipher(len(key_str) * 8, key_str, None, CipherMode.CFB, BLOCK_CIPHER_PADDING,
+                                                encrypt_aes_bytes, decrypt_aes_bytes)
+            case "AES OFB":
+                self.block_cipher = BlockCipher(len(key_str) * 8, key_str, None, CipherMode.OFB, BLOCK_CIPHER_PADDING,
+                                                encrypt_aes_bytes, decrypt_aes_bytes)
+            case "VIG CBC":
+                self.block_cipher = BlockCipher(len(key_str) * 8, key_str, None, CipherMode.CBC, BLOCK_CIPHER_PADDING,
+                                                encrypt_vigenere_bytes, decrypt_vigenere_bytes)
+            case "VIG ECB":
+                self.block_cipher = BlockCipher(len(key_str) * 8, key_str, None, CipherMode.ECB, BLOCK_CIPHER_PADDING,
+                                                encrypt_vigenere_bytes, decrypt_vigenere_bytes)
+            case "VIG CFB":
+                self.block_cipher = BlockCipher(len(key_str) * 8, key_str, None, CipherMode.CFB, BLOCK_CIPHER_PADDING,
+                                                encrypt_vigenere_bytes, decrypt_vigenere_bytes)
+            case "VIG OFB":
+                self.block_cipher = BlockCipher(len(key_str) * 8, key_str, None, CipherMode.OFB, BLOCK_CIPHER_PADDING,
+                                                encrypt_vigenere_bytes, decrypt_vigenere_bytes)
     def chat_loop_initiator(self, peer_socket: socket, conn: socket):
         """
         Encrypted chat for the client who initiated the key exchange (sends first).
