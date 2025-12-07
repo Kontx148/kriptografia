@@ -1,2 +1,0 @@
-DEFAULT_HOST = 'localhost'
-DEFAULT_PORT = 12000
