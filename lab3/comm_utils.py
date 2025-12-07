@@ -32,7 +32,7 @@ class ActionMode(Enum):
     SENDING_BLOCK_CIPHER = 5
     SENDING_HALF_SECRET = 6
     REQUEST_HALF_SECRET = 7
-    SEND_ENCRYPTED_MESSAGE = 8
+    CHAT_MESSAGE = 8
 
 # Dto's
 

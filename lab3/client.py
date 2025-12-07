@@ -329,6 +329,10 @@ class Client:
         # Save the shared key and init blockCipher
         self.shared_key = shared
         self._init_block_cipher_with_shared_key()
+
+        # Start a chat loop (initiator sends first)
+        self.chat_loop_initiator(peer_socket, conn)
+        listener_socket.close()
         return
 
     def handle_second_peer_communication(self):
@@ -398,25 +402,140 @@ class Client:
         # Save the shared key and init blockCipher
         self.shared_key = shared
         self._init_block_cipher_with_shared_key()
+
+        # Start a chat loop (receiver waits for the first message)
+        self.chat_loop_receiver(peer_socket, conn)
+        listener_socket.close()
         return
 
     def _init_block_cipher_with_shared_key(self):
         """
-        Initialize self.block_cipher using self.shared_key as a string key
+        Initialize self.block_cipher using self.shared_key as a string key.
+        Truncates/pads the hex string to exactly 16 characters
         """
         if self.shared_key is None:
-            raise ValueError("Shared key not set")
+            logger.error("No shared key available")
+            return
 
+        # Convert shared bytes to hex string
         key_str = self.shared_key.hex()
+
+        # AES-128 needs exactly 16 bytes after .encode()
+        if len(key_str) < 16:
+            key_str = key_str.ljust(16, '0')
+        key_str = key_str[:16]
 
         self.block_cipher = BlockCipher(
             len(key_str) * 8,
             key_str,
             None,
             CipherMode.CBC,
-            PaddingMode.ZERO,
+            PaddingMode.SF,
             encrypt_aes_bytes,
-            decrypt_aes_bytes)
+            decrypt_aes_bytes
+        )
+
+    def chat_loop_initiator(self, peer_socket: socket, conn: socket):
+        """
+        Encrypted chat for the client who initiated the key exchange (sends first).
+        Type 'stop' to send 'goodbye' and end.
+        """
+        if self.block_cipher is None:
+            logger.error("BlockCipher not initialized.")
+            return
+
+        logger.info("Starting encrypted chat (you send first). Type 'stop' to end.")
+
+        running = True
+        while running:
+            msg = input("You: ")
+            if msg.strip().lower() == "stop":
+                plaintext = b"goodbye"
+            else:
+                plaintext = msg.encode()
+
+            encrypted = bytes(self.block_cipher.encrypt(plaintext))
+            dto = TransferDTO(action=ActionMode.CHAT_MESSAGE, data=encrypted)
+            send_transfer_dto(dto, peer_socket)
+
+            if msg.strip().lower() == "stop":
+                logger.info("Sent goodbye. Ending chat.")
+                break
+
+            response = recv_transfer_dto(conn)
+            if response is None:
+                logger.info("Peer closed connection.")
+                break
+            if response.action != ActionMode.CHAT_MESSAGE:
+                logger.error(f"Unexpected action: {response.action}")
+                break
+
+            try:
+                decrypted = self.block_cipher.decrypt(response.data, remove_padding=True)
+                text = decrypted.decode(errors="replace")
+            except Exception as e:
+                logger.exception(f"Decryption error: {e}")
+                break
+
+            if text.strip().lower() == "goodbye":
+                logger.info("Peer ended conversation.")
+                break
+
+            print(f"Peer: {text}")
+
+        peer_socket.close()
+        conn.close()
+
+    def chat_loop_receiver(self, peer_socket: socket, conn: socket):
+        """
+        Encrypted chat for the client who received the key exchange
+        Type 'stop' to send 'goodbye' and end
+        """
+        if self.block_cipher is None:
+            logger.error("BlockCipher not initialized.")
+            return
+
+        logger.info("Starting encrypted chat (peer sends first).")
+
+        running = True
+        while running:
+            response = recv_transfer_dto(conn)
+            if response is None:
+                logger.info("Peer closed connection.")
+                break
+            if response.action != ActionMode.CHAT_MESSAGE:
+                logger.error(f"Unexpected action: {response.action}")
+                break
+
+            try:
+                decrypted = self.block_cipher.decrypt(response.data, remove_padding=True)
+                text = decrypted.decode(errors="replace")
+            except Exception as e:
+                logger.exception(f"Decryption error: {e}")
+                break
+
+            if text.strip().lower() == "goodbye":
+                logger.info("Peer ended conversation.")
+                break
+
+            print(f"Peer: {text}")
+
+            msg = input("You: ")
+            if msg.strip().lower() == "stop":
+                plaintext = b"goodbye"
+            else:
+                plaintext = msg.encode()
+
+            encrypted = bytes(self.block_cipher.encrypt(plaintext))
+            dto = TransferDTO(action=ActionMode.CHAT_MESSAGE, data=encrypted)
+            send_transfer_dto(dto, peer_socket)
+
+            if msg.strip().lower() == "stop":
+                logger.info("Sent goodbye. Ending chat.")
+                break
+
+        peer_socket.close()
+        conn.close()
 
 
 def print_help():
