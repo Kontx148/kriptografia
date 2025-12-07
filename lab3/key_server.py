@@ -1,4 +1,7 @@
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.dh import DHPrivateKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+from cryptography.hazmat.primitives.asymmetric import dh
 
 from common import DEFAULT_PORT
 
@@ -19,6 +22,23 @@ logger = logging.getLogger()
 logger.info('The server is ready to receive')
 
 public_keys: dict[int, RSAPublicKey] = {}
+
+# Generate Diffie-Hellman parameters
+parameters = dh.generate_parameters(generator=2, key_size=512)
+
+def generate_half_secret() -> DHPrivateKey:
+    private_key = parameters.generate_private_key()
+    return private_key
+
+def request_half_secret(cs: socket):
+    private_key = generate_half_secret()
+    private_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    response_dto = ResponseDTO(True, private_bytes)
+    send_response_dto(response_dto, cs)
 
 def register_public_key(dto: TransferDTO, cs: socket):
     try:
@@ -61,6 +81,8 @@ def client_handler(cs: socket):
                 register_public_key(dto, cs)
             case ActionMode.REQUEST_PUBLIC_KEY:
                 request_public_key(dto, cs)
+            case ActionMode.REQUEST_HALF_SECRET:
+                request_half_secret(cs)
             case ActionMode.CLOSE_CONNECTION:
                 toLoop = False
 

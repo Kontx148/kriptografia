@@ -1,7 +1,26 @@
 import pickle
 from socket import socket
 from typing import Any
-from enum import Enum
+
+from block_cipher.block_cipher import *
+
+from Crypto.Cipher import AES
+
+IV = b'\x9f\x3a\x7c\x12\xe4\x56\xab\x90\xcd\x21\x88\xfe\x47\x6b\x11\xde'
+
+def encrypt_aes_bytes(data: bytes, key: str, mode=AES.MODE_CBC) -> bytes:
+    key = key.encode()
+    cipher = AES.new(key, mode, iv=IV)
+    return cipher.encrypt(data)
+
+def decrypt_aes_bytes(data: bytes, key: str, mode=AES.MODE_CBC) -> bytes:
+    key = key.encode()
+    cipher = AES.new(key, mode, iv=IV)
+    return cipher.decrypt(data)
+
+# Block Cipher config file path
+
+BLOCK_CIPHER_CONFIG_PATH = "block_cipher/config.json"
 
 # Action Enum
 
@@ -9,6 +28,11 @@ class ActionMode(Enum):
     REGISTER_PUBLIC_KEY = 1
     REQUEST_PUBLIC_KEY = 2
     CLOSE_CONNECTION = 3
+    REQUEST_PEER_TO_PEER_COMMUNICATION = 4
+    SENDING_BLOCK_CIPHER = 5
+    SENDING_HALF_SECRET = 6
+    REQUEST_HALF_SECRET = 7
+    SEND_ENCRYPTED_MESSAGE = 8
 
 # Dto's
 

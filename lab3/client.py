@@ -1,14 +1,21 @@
+import json
 import threading
-from typing import Tuple
+from typing import Tuple, List
+
+from cryptography.hazmat.primitives.asymmetric.dh import DHPublicKey, DHPrivateKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from socket import *
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import rsa, padding, dh
+from cryptography.hazmat.primitives import hashes, serialization
 import logging
 
+from cryptography.hazmat.primitives.serialization import load_pem_public_key, load_der_public_key, load_pem_private_key
+
+from block_cipher.block_cipher import BlockCipher, CipherMode, PaddingMode
 from lab3.common import encode_public_key, decode_public_key
 from common import DEFAULT_PORT, DEFAULT_HOST
 from lab3.comm_utils import recv_transfer_dto, recv_response_dto, TransferDTO, ActionMode, ResponseDTO, \
-    send_transfer_dto, send_response_dto
+    send_transfer_dto, send_response_dto, BLOCK_CIPHER_CONFIG_PATH, encrypt_aes_bytes, decrypt_aes_bytes
 
 logging.basicConfig(format='[%(threadName)s] %(asctime)s %(message)s', level=logging.INFO)
 logger = logging.getLogger()
@@ -19,7 +26,6 @@ def generate_rsa_key_pair() -> Tuple[RSAPrivateKey, RSAPublicKey]:
     public_key = private_key.public_key()
     return private_key, public_key
 
-
 class Client:
     private_key: RSAPrivateKey
     public_key: RSAPublicKey
@@ -27,6 +33,9 @@ class Client:
     client_socket: socket
     _running = False
     listener: threading.Thread
+
+    shared_key: bytes | None = None
+    block_cipher: BlockCipher | None = None
 
     def __init__(self, client_id: int):
         self.client_id = client_id
@@ -92,7 +101,7 @@ class Client:
         logger.info('Sending DTO to server...')
         send_transfer_dto(dto, self.client_socket)
 
-        # Don't wait for response if the listener is already running
+        # Don't wait for a response if the listener is already running
         if self._running:
             return
 
@@ -120,15 +129,306 @@ class Client:
             logger.error(f'Error requesting public key for user {key_id} : {response.data.decode()}')
         return None
 
+    def open_listener_socket(self):
+        # Open a new socket for listening
+        listen_socket = socket(AF_INET, SOCK_STREAM)
+        listen_socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+        listen_socket.bind(('', self.client_id))
+        listen_socket.listen(1)
+
+        if self._running:
+            self.stop_listener()
+
+        return listen_socket
+
+    def request_peer_public_key(self, peer_id: int) -> RSAPublicKey | None:
+        logger.info("Requesting public RSA key for client " + str(peer_id) + "...")
+        dto = TransferDTO(action=ActionMode.REQUEST_PUBLIC_KEY, data=peer_id.to_bytes(4, byteorder='big'))
+        send_transfer_dto(dto, self.client_socket)
+        response = recv_response_dto(self.client_socket)
+        if not response.success:
+            logger.error(f'Error requesting public key for user {peer_id} : {response.data.decode()}')
+            raise ValueError("Error requesting public key for user " + str(peer_id) + ": " + response.data.decode() + "")
+
+        logger.info(f'Successfully requested public key for client {peer_id}')
+        return decode_public_key(response.data)
+
+    def request_half_key(self) -> DHPrivateKey | None:
+        logger.info("Requesting half secret for client " + str(self.client_id) + "...")
+        dto = TransferDTO(action=ActionMode.REQUEST_HALF_SECRET, data=b'')
+        send_transfer_dto(dto, self.client_socket)
+        response = recv_response_dto(self.client_socket)
+        if not response.success:
+            logger.error(f'Error requesting half secret for user {self.client_id} : {response.data.decode()}')
+            raise ValueError("Error requesting half secret for user " + str(self.client_id) + ": " + response.data.decode() + "")
+
+        logger.info(f'Successfully half secret for client {self.client_id}')
+        dh_private_key = load_pem_private_key(response.data, password=None)
+        return dh_private_key
+
+    def send_block_cipher(self, block_cipher_list: list[str], peer_public_key: RSAPublicKey, peer_socket: socket):
+        logger.info('Sending block cipher list to peer using RSA encryption...')
+        encrypted_data = json.dumps(block_cipher_list).encode()
+        encrypted_data = peer_public_key.encrypt(
+            encrypted_data,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
+        )
+        dto = TransferDTO(action=ActionMode.SENDING_BLOCK_CIPHER, data=encrypted_data)
+        send_transfer_dto(dto, peer_socket)
+
+    def receive_block_cipher(self, peer_socket: socket, own_private_key: rsa.RSAPrivateKey) -> List[str] | None:
+        logger.info('Waiting for block cipher list from client ...')
+
+        response = recv_transfer_dto(peer_socket)
+        if response is None:
+            logger.error('Error receiving peer to peer request from another client')
+            return None
+
+        if response.action != ActionMode.SENDING_BLOCK_CIPHER:
+            logger.error(f'Received unexpected action {response.action} from client')
+            return None
+
+        try:
+            # Decrypt the encrypted payload with our own RSA private key
+            decrypted_bytes = own_private_key.decrypt(
+                response.data,
+                padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None,
+                ),
+            )
+
+            # The decrypted data should be JSON-encoded list of block ciphers
+            block_ciphers = json.loads(decrypted_bytes.decode())
+
+            return block_ciphers
+
+        except Exception as e:
+            logger.exception(f'Failed to decrypt or parse block cipher list: {e}')
+            return None
+
+
+    def send_half_secret(self, key: DHPublicKey, peer_public_key: RSAPublicKey, peer_socket: socket):
+        """
+        Sends a half-secret to the specified peer port, using RSA encryption
+        """
+        # Serialize a DH public key to bytes
+        logger.info('Sending half secret to peer using RSA encryption...')
+        dh_public_bytes = key.public_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+
+        # Encrypt with a peer's RSA public key
+        encrypted_data = peer_public_key.encrypt(
+            dh_public_bytes,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
+        )
+
+        dto = TransferDTO(action=ActionMode.SENDING_HALF_SECRET, data=encrypted_data)
+        send_transfer_dto(dto, peer_socket)
+
+    def receive_half_secret(self, peer_socket: socket) -> DHPublicKey | None:
+        logger.info("Waiting for half secret from client ...")
+
+        response = recv_transfer_dto(peer_socket)
+        if response is None:
+            logger.error('Error receiving peer to peer request from another client')
+            return None
+
+        if response.action != ActionMode.SENDING_HALF_SECRET:
+            logger.error(f'Received unexpected action {response.action} from client')
+
+        try:
+            # Decrypt using our RSA private key
+            decrypted = self.private_key.decrypt(
+                response.data,
+                padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None,
+                ),
+            )
+
+            # Load the DH public key from decrypted bytes
+            peer_dh_public_key = load_der_public_key(decrypted)
+            if not isinstance(peer_dh_public_key, dh.DHPublicKey):
+                logger.error('Decrypted key is not a DHPublicKey')
+                return None
+
+            return peer_dh_public_key
+
+        except Exception as e:
+            logger.exception(f'Failed to decrypt or load peer half secret: {e}')
+            return None
+
+
+    def handle_first_peer_communication(self, peer_port: int):
+        # Fixed block cipher list
+        block_cipher_list_1 = ['AES CBC', 'AES ECB', 'AES CFB', 'AES OFB', 'VIG CBC', 'VIG ECB', 'VIG CFB', 'VIG OFB']
+
+        listener_socket = self.open_listener_socket()
+
+        # First, open a new socket for the peer
+        peer_socket = socket(AF_INET, SOCK_STREAM)
+        peer_socket.connect((DEFAULT_HOST, peer_port))
+
+        # Send a peer-to-peer request, sending our client ID
+        user_id_data = self.client_id.to_bytes(4, byteorder='big')
+        dto = TransferDTO(ActionMode.REQUEST_PEER_TO_PEER_COMMUNICATION, user_id_data)
+        logger.info(f'Sending peer to peer request to peer {peer_port}...')
+        send_transfer_dto(dto, peer_socket)
+
+        # Wait for the peer to connect back to our listening socket
+        logger.info('Waiting for peer to connect back with accept/decline response...')
+        conn, addr = listener_socket.accept()
+        response = recv_response_dto(conn)
+        if response is None:
+            logger.error(f'Error receiving peer to peer response from peer {peer_port}')
+            return
+        if not response.success:
+            logger.info(f'Peer {peer_port} rejected peer to peer communication request')
+            return
+        logger.info(f'Peer {peer_port} accepted peer to peer communication request')
+
+        # Request peer's public key
+        client2_public_key = self.request_peer_public_key(peer_port)
+
+        # Send block cipher list to peer
+        self.send_block_cipher(block_cipher_list_1, client2_public_key, peer_socket)
+
+        # Waiting for the block cipher list from a client
+        block_cipher_list_2 = self.receive_block_cipher(conn, self.private_key)
+
+        # Init blockcipher
+        BlockCipher.from_config(BLOCK_CIPHER_CONFIG_PATH, encrypt_aes_bytes, decrypt_aes_bytes)
+
+        # Generate half secret
+        key1 = self.request_half_key()
+
+        # Send this key1 to client2 with rsa
+        self.send_half_secret(key1.public_key(), client2_public_key, peer_socket)
+
+        # Receive half secret from client2 with rsa
+        key2 = self.receive_half_secret(conn)
+
+        # Compute the shared key
+        shared = key1.exchange(key2)
+
+        logger.info("Successfully created common key : " + shared.hex())
+
+        # Save the shared key and init blockCipher
+        self.shared_key = shared
+        self._init_block_cipher_with_shared_key()
+        return
+
+    def handle_second_peer_communication(self):
+        # Fixed block cipher list
+        block_cipher_list_2 = ['AES CBC', 'AES ECB', 'AES CFB', 'AES OFB', 'VIG CBC', 'VIG ECB', 'VIG CFB', 'VIG OFB']
+
+        listener_socket = self.open_listener_socket()
+
+        # Wait for a peer-to-peer request from another client
+        logger.info('Waiting for peer to peer request from another client...')
+
+        conn, addr = listener_socket.accept()
+        response = recv_transfer_dto(conn)
+        if response is None:
+            logger.error('Error receiving peer to peer request from another client')
+            return
+        if response.action != ActionMode.REQUEST_PEER_TO_PEER_COMMUNICATION:
+            logger.error(f'Received unexpected action {response.action} from client {addr}')
+            return
+        client1_id = int.from_bytes(response.data, 'big')
+        logger.info(f'Received peer to peer request from client {client1_id}')
+
+        # Accept or decline the request
+        accept = input(f'Accept peer to peer request from client {client1_id}? (y/n): ')
+        declined = accept not in ['y', 'Y']
+        if accept == 'y':
+            logger.info(f'Accepting peer to peer request from client {client1_id}')
+            response = ResponseDTO(True, b'')
+        else:
+            logger.info(f'Declining peer to peer request from client {client1_id}')
+            response = ResponseDTO(False, b'')
+
+        # Open a new socket for the peer
+        peer_socket = socket(AF_INET, SOCK_STREAM)
+        peer_socket.connect((DEFAULT_HOST, client1_id))
+        send_response_dto(response, peer_socket)
+
+        if declined:
+            return
+        logger.info("Peer to peer communication established with client " + str(client1_id) + "")
+
+        # Request peer's public key
+        client1_public_key = self.request_peer_public_key(client1_id)
+
+        # Waiting for the block cipher list from client 1
+        block_cipher_list_1 = self.receive_block_cipher(conn, self.private_key)
+
+        # Send a block cipher list to peer
+        self.send_block_cipher(block_cipher_list_2, client1_public_key, peer_socket)
+
+        # Init blockcipher
+        BlockCipher.from_config(BLOCK_CIPHER_CONFIG_PATH, encrypt_aes_bytes, decrypt_aes_bytes)
+
+        # Generate half secret
+        key2 = self.request_half_key()
+
+        # Receive half-secret from client1 using rsa
+        key1 = self.receive_half_secret(conn)
+
+        # Send key2 to client1 using rsa
+        self.send_half_secret(key2.public_key(), client1_public_key, peer_socket)
+
+        # Compute the shared key
+        shared = key2.exchange(key1)
+        logger.info("Successfully created common key : " + shared.hex())
+
+        # Save the shared key and init blockCipher
+        self.shared_key = shared
+        self._init_block_cipher_with_shared_key()
+        return
+
+    def _init_block_cipher_with_shared_key(self):
+        """
+        Initialize self.block_cipher using self.shared_key as a string key
+        """
+        if self.shared_key is None:
+            raise ValueError("Shared key not set")
+
+        key_str = self.shared_key.hex()
+
+        self.block_cipher = BlockCipher(
+            len(key_str) * 8,
+            key_str,
+            None,
+            CipherMode.CBC,
+            PaddingMode.ZERO,
+            encrypt_aes_bytes,
+            decrypt_aes_bytes)
+
 
 def print_help():
     print("=" * 40)
     print("Available commands:")
     print("1 - Generate and register RSA key pair")
     print("2 - Request public key from server")
-    print("3 - Exit")
+    print("3 - Initialize a conversation with another client")
+    print("4 - Wait for a peer to peer conversation request from another client")
     print("5 - Start listener")
     print("6 - Stop listener")
+    print("7 - Exit")
 
 
 def run_communication():
@@ -148,16 +448,33 @@ def run_communication():
         command = input("Enter command (help for list of commands): ")
         match command:
             case "1":
+                # Register key pair
                 client.generate_and_register_key()
             case "2":
+                # Request a public key
                 requested_id = input("Enter user ID to request public key for: ")
                 client.request_public_key(int(requested_id))
             case "3":
-                to_loop = False
+                # Start chatting with another client as client 1
+                peer_id = input("Enter peer ID to chat with: ")
+                try:
+                    client_id = int(client_id)
+                except ValueError:
+                    print("Peer ID must be an integer")
+                    continue
+                client.handle_first_peer_communication(int(peer_id))
+            case "4":
+                # Wait for a chatting opportunity as client 2
+                client.handle_second_peer_communication()
             case "5":
+                # Start listener
                 client.run_listener()
             case "6":
+                # Stop listener
                 client.stop_listener()
+            case "7":
+                to_loop = False
+                print("Goodbye!")
             case _:
                 print_help()
 
