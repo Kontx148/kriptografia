@@ -1,5 +1,6 @@
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
+from cryptography.hazmat.primitives import serialization
 
 from common import DEFAULT_PORT
 
@@ -7,7 +8,7 @@ from socket import *
 from threading import Thread
 import logging
 
-from lab3.common import TransferDTO, ActionMode
+from lab3.common import TransferDTO, ActionMode, encode_public_key, decode_public_key
 
 serverSocket = socket(AF_INET, SOCK_STREAM)
 serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
@@ -40,12 +41,17 @@ def register_public_key(dto: TransferDTO, cs: socket):
     user_id_str, pem_key = raw.split('\n', 1)
     user_id = int(user_id_str)
 
-    user_public_key = load_pem_public_key(pem_key.encode())
-
+    user_public_key = decode_public_key(pem_key.encode())
     public_keys[user_id] = user_public_key
 
     logger.info(f"Public key registered: user {user_id}")
     cs.sendall(b'OK')
+
+def request_public_key(dto: TransferDTO, cs: socket):
+    user_id = int(dto.data)
+    public_key = public_keys.get(user_id)
+    if public_key:
+        cs.sendall(encode_public_key(public_key))
 
 def client_handler(cs: socket):
     cs.settimeout(5)
@@ -67,6 +73,10 @@ def client_handler(cs: socket):
         match dto.action:
             case ActionMode.REGISTER_PUBLIC_KEY:
                 register_public_key(dto, cs)
+            case ActionMode.REQUEST_PUBLIC_KEY:
+                request_public_key(dto, cs)
+            case ActionMode.CLOSE_CONNECTION:
+                toLoop = False
 
         if not toLoop:
             break
