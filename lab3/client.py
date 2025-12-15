@@ -266,6 +266,8 @@ class Client:
 
     def find_common_cipher(self, block_cipher_list_1: List[str], block_cipher_list_2: List[str]) -> str | None:
         common_cipher = None
+        block_cipher_list_1 = sorted(block_cipher_list_1)
+        block_cipher_list_2 = sorted(block_cipher_list_2)
         for cipher in block_cipher_list_1:
             if cipher in block_cipher_list_2:
                 common_cipher = cipher
