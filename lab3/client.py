@@ -1,19 +1,21 @@
-import json
 import threading
 import logging
 from socket import *
 from typing import Tuple, List
 
-from cryptography.hazmat.primitives.asymmetric.dh import DHPublicKey, DHPrivateKey
+from cryptography.hazmat.primitives.asymmetric.dh import DHPublicKey, DHPrivateKey, DHParameters
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.asymmetric import rsa, padding, dh
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.serialization import load_der_public_key, load_pem_private_key
+from cryptography.hazmat.primitives.serialization import load_der_public_key
 
 from lab1.crypto import encrypt_vigenere_bytes, decrypt_vigenere_bytes
 from lab3.common import *
 from lab3.comm_utils import *
 from common import DEFAULT_PORT, DEFAULT_HOST
+
+from cryptography.hazmat.primitives import serialization
+
 
 logging.basicConfig(format='[%(threadName)s] %(asctime)s %(message)s', level=logging.INFO)
 logger = logging.getLogger()
@@ -38,6 +40,7 @@ class Client:
 
     shared_key: bytes | None = None
     block_cipher: BlockCipher | None = None
+    parameters: DHParameters | None = None
 
     def __init__(self, client_id: int):
         self.client_id = client_id
@@ -46,6 +49,11 @@ class Client:
         clientSocket = socket(AF_INET, SOCK_STREAM)
         clientSocket.connect((DEFAULT_HOST, DEFAULT_PORT))
         self.client_socket = clientSocket
+
+        with open("dh_params.pem", "rb") as f:
+            pem = f.read()
+
+        self.parameters = serialization.load_pem_parameters(pem)
 
     # Listener actions
     def run_listener(self):
@@ -140,17 +148,12 @@ class Client:
         return decode_public_key(response.data)
 
     def request_half_key(self) -> DHPrivateKey | None:
-        logger.info("Requesting half secret for peer " + str(self.client_id) + "...")
-        dto = TransferDTO(action=ActionMode.REQUEST_HALF_SECRET, data=b'')
-        send_transfer_dto(dto, self.client_socket)
-        response = recv_response_dto(self.client_socket)
-        if not response.success:
-            logger.error(f'Error requesting half secret for peer {self.client_id} : {response.data.decode()}')
-            raise ValueError(
-                "Error requesting half secret for peer " + str(self.client_id) + ": " + response.data.decode() + "")
-
-        logger.info(f'Successfully received secret for peer {self.client_id}')
-        dh_private_key = load_pem_private_key(response.data, password=None)
+        """
+        Generate a DH private key locally using loaded parameters
+        """
+        logger.info(f"Generating DH half secret locally for client {self.client_id}...")
+        dh_private_key = self.parameters.generate_private_key()
+        logger.info("Successfully generated DH half secret locally")
         return dh_private_key
 
     def send_block_cipher(self, block_cipher_list: list[str], peer_public_key: RSAPublicKey, peer_socket: socket):
