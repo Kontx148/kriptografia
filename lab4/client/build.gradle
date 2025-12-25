@@ -1,0 +1,14 @@
+plugins {
+    id 'java'
+}
+
+group = 'edu.bbte.kripto'
+version = 'unspecified'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':common')
+}
