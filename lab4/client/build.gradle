@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'application'
 }
 
 group = 'edu.bbte.kripto'
@@ -11,4 +12,31 @@ repositories {
 
 dependencies {
     implementation project(':common')
+}
+
+application {
+    mainClass = 'edu/bbte/kripto/BNRClient'
+}
+
+// Task to run BNRClient with custom truststore
+task runBNRClient(type: JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'edu.bbte.kripto.BNRClient'
+
+    def ts = file('../scripts/certs/bnr-truststore.p12').absolutePath
+    println "USING TRUSTSTORE: $ts"
+
+    systemProperty 'javax.net.ssl.trustStore', ts
+    systemProperty 'javax.net.ssl.trustStorePassword', 'asd123'
+    systemProperty 'javax.net.ssl.trustStoreType', 'PKCS12'
+}
+
+tasks.register('runMutualAuthClient', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'edu.bbte.kripto.MutualAuthClient'
+}
+
+tasks.register('runSimpleClient', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'edu.bbte.kripto.SimpleClient'
 }

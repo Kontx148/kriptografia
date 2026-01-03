@@ -54,9 +54,9 @@ public class CertificateUtils {
      * @param cert The X.509 certificate to analyze
      */
     public static void printX509CertificateDetails(X509Certificate cert) {
-        logger.info("═══════════════════════════════════════════════════════════════");
-        logger.info("                    CERTIFICATE DETAILS                         ");
-        logger.info("═══════════════════════════════════════════════════════════════");
+        logger.info("===============================================================");
+        logger.info("                    CERTIFICATE DETAILS                        ");
+        logger.info("===============================================================");
 
         // 1. Version number (X.509 v1=0, v2=1, v3=2, so we add 1 for display)
         logger.info("Version: V{}", cert.getVersion());
@@ -83,7 +83,7 @@ public class CertificateUtils {
         // 8. Signature algorithm
         logger. info("Signature Algorithm: {}", cert. getSigAlgName());
 
-        logger.info("═══════════════════════════════════════════════════════════════");
+        logger.info("===============================================================");
     }
 
     /**

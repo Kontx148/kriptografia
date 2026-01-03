@@ -1,146 +1,131 @@
 package edu.bbte.kripto;
 
+import org. slf4j.Logger;
+import org. slf4j.LoggerFactory;
+
 import javax.net.ssl.*;
 import java.io.*;
-import java.net.URL;
-import java.security.cert.Certificate;
-import java.security.cert.X509Certificate;
-import java.util.Date;
-import java.util.logging.Logger;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
+/**
+ * Task 1: TLS Client for connecting to the Romanian National Bank (BNR) website.
+ *
+ * This client:
+ * 1. Establishes a secure TLS connection to https://bnr.ro
+ * 2. Sends an HTTP GET request
+ * 3. Saves the HTML response to a file
+ * 4. Displays certificate details (version, serial, issuer, validity, subject, public key)
+ */
 public class BNRClient {
 
-    public static final Logger LOG = Logger.getLogger(BNRClient.class.getName());
+    private static final Logger logger = LoggerFactory.getLogger(BNRClient.class);
+
+    private static final String BNR_HOST = "bnr.ro";
+    private static final int HTTPS_PORT = 443;
+    private static final String OUTPUT_FILE = "bnr_response.html";
 
     public static void main(String[] args) {
-        String urlString = "https://bnr.ro/Home.aspx";
-        String outputFile = "bnr_response.html";
+        logger.info("Starting BNR TLS Client...");
 
         try {
-            LOG.info("=== BNR.RO TLS Client ===\n");
-            LOG.info("Connecting: " + urlString);
+            // Create SSL socket factory using the default trust store
+            // The default trust store contains well-known CA certificates
+            SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
 
-            URL url = new URL(urlString);
-            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+            // Establish TLS connection to BNR
+            logger.info("Connecting to {}:{} via TLS.. .", BNR_HOST, HTTPS_PORT);
 
-            // TLS 1.2 vagy újabb beállítása
-            SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(null, null, null);
-            connection.setSSLSocketFactory(sslContext.getSocketFactory());
+            try (SSLSocket socket = (SSLSocket) factory.createSocket(BNR_HOST, HTTPS_PORT)) {
 
-            // HTTP GET kérés
-            connection.setRequestMethod("GET");
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0");
-            connection.connect();
+                // Configure TLS parameters for security
+                SSLParameters params = socket.getSSLParameters();
+                // Enable endpoint identification to verify hostname matches certificate
+                params.setEndpointIdentificationAlgorithm("HTTPS");
+                socket.setSSLParameters(params);
 
-            // Tanúsítvány lekérése és adatok kiírása
-            Certificate[] certs = connection.getServerCertificates();
-            if (certs.length > 0 && certs[0] instanceof X509Certificate) {
-                X509Certificate cert = (X509Certificate) certs[0];
-                printCertificateInfo(cert);
+                // Initiate TLS handshake
+                socket.startHandshake();
+                logger.info("TLS handshake completed successfully!");
+
+                // Get and display the SSL session information
+                SSLSession session = socket.getSession();
+                logger.info("Protocol: {}", session.getProtocol());
+                logger.info("Cipher Suite: {}", session.getCipherSuite());
+
+                // Print detailed certificate information
+                CertificateUtils.printCertificateInfo(session);
+
+                // Send HTTP GET request
+                sendHttpGetRequest(socket);
+
+                // Receive and save the HTML response
+                String htmlContent = receiveHttpResponse(socket);
+                saveToFile(htmlContent);
+
+                logger.info("Successfully saved BNR response to {}", OUTPUT_FILE);
             }
 
-            // HTTP válasz olvasása
-            int responseCode = connection.getResponseCode();
-            System.out.println("\n=== HTTP Válasz ===");
-            System.out.println("Response Code: " + responseCode);
-
-            // HTML tartalom mentése
-            if (responseCode == 200) {
-                saveResponse(connection, outputFile);
-                System.out.println("HTML tartalom elmentve: " + outputFile);
-            } else {
-                System.out.println("Hiba: " + responseCode);
-            }
-
-            connection.disconnect();
-
+        } catch (SSLHandshakeException e) {
+            // This exception occurs when certificate validation fails
+            logger. error("SSL Handshake failed!  Certificate validation error: {}", e.getMessage());
+            logger.error("This could indicate a man-in-the-middle attack or invalid certificate!");
         } catch (Exception e) {
-            System.err.println("Hiba: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("Error connecting to BNR:  {}", e.getMessage(), e);
         }
     }
 
     /**
-     * Tanúsítvány főbb adatainak kiírása
+     * Sends an HTTP GET request for the home page.
      */
-    private static void printCertificateInfo(X509Certificate cert) {
-        System.out.println("\n=== Tanúsítvány Adatok ===\n");
+    private static void sendHttpGetRequest(SSLSocket socket) throws IOException {
+        PrintWriter writer = new PrintWriter(
+                new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8),
+                true
+        );
 
-        // Verziószám
-        System.out.println("Verzió: " + cert.getVersion());
+        // HTTP/1.1 request with required headers
+        String httpRequest = """
+            GET /Home.aspx HTTP/1.1
+            Host:  %s
+            User-Agent: Java-SSL-Client/1.0
+            Accept: text/html
+            Connection: close
+            
+            """.formatted(BNR_HOST);
 
-        // Szériaszám
-        System.out.println("Szériaszám: " + cert.getSerialNumber().toString(16).toUpperCase());
+        writer.print(httpRequest.replace("\n", "\r\n"));
+        writer.flush();
 
-        // Kibocsátó (Issuer) - Tanúsító hatóság
-        System.out.println("Kibocsátó (Issuer): " + cert.getIssuerX500Principal().getName());
-
-        // Alany (Subject) - Tanúsítvány tulajdonosa
-        System.out.println("Alany (Subject): " + cert.getSubjectX500Principal().getName());
-
-        // Érvényesség kezdete
-        Date notBefore = cert.getNotBefore();
-        System.out.println("Érvényesség kezdete: " + notBefore);
-
-        // Érvényesség vége
-        Date notAfter = cert.getNotAfter();
-        System.out.println("Érvényesség vége: " + notAfter);
-
-        // Nyilvános kulcs típusa és algoritmus
-        System.out.println("\n--- Nyilvános Kulcs Adatok ---");
-        System.out.println("Algoritmus: " + cert.getPublicKey().getAlgorithm());
-        System.out.println("Formátum: " + cert.getPublicKey().getFormat());
-
-        // Nyilvános kulcs
-        byte[] publicKeyBytes = cert.getPublicKey().getEncoded();
-        System.out.println("Nyilvános kulcs mérete: " + publicKeyBytes.length + " bájt");
-        System.out.println("Nyilvános kulcs (első 64 karakter): " +
-                bytesToHex(publicKeyBytes).substring(0, Math.min(64, bytesToHex(publicKeyBytes).length())));
-
-        // Aláírás algoritmus
-        System.out.println("\nAláírás algoritmus: " + cert.getSigAlgName());
-
-        // Subject Alternative Names (ha van)
-        try {
-            var sans = cert.getSubjectAlternativeNames();
-            if (sans != null && !sans.isEmpty()) {
-                System.out.println("\n--- Subject Alternative Names ---");
-                for (var san : sans) {
-                    System.out.println("  Típus " + san.get(0) + ": " + san.get(1));
-                }
-            }
-        } catch (Exception e) {
-            // Nincs SAN
-        }
+        logger.info("HTTP GET request sent");
     }
 
     /**
-     * HTTP válasz mentése fájlba
+     * Receives and parses the HTTP response, extracting the HTML body.
      */
-    private static void saveResponse(HttpsURLConnection connection, String filename)
-            throws IOException {
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(connection.getInputStream(), "UTF-8"));
-             BufferedWriter writer = new BufferedWriter(
-                     new FileWriter(filename))) {
+    private static String receiveHttpResponse(SSLSocket socket) throws IOException {
+        BufferedReader reader = new BufferedReader(
+                new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8)
+        );
 
-            String line;
-            while ((line = reader.readLine()) != null) {
-                writer.write(line);
-                writer.newLine();
-            }
+        StringBuilder response = new StringBuilder();
+        String line;
+
+        // Read the entire response (headers + body)
+        while ((line = reader.readLine()) != null) {
+            response.append(line).append("\n");
         }
+
+        logger.info("Received {} bytes of data", response.length());
+        return response.toString();
     }
 
     /**
-     * Bájt tömb hexadecimális stringgé alakítása
+     * Saves the HTML content to a file.
      */
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02X", b));
-        }
-        return sb.toString();
+    private static void saveToFile(String content) throws IOException {
+        Path outputPath = Path.of(OUTPUT_FILE);
+        Files.writeString(outputPath, content, StandardCharsets.UTF_8);
     }
 }
