@@ -9,29 +9,36 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/**
- * Task 1: TLS Client for connecting to the Romanian National Bank (BNR) website.
- *
- * This client:
- * 1. Establishes a secure TLS connection to https://bnr.ro
- * 2. Sends an HTTP GET request
- * 3. Saves the HTML response to a file
- * 4. Displays certificate details (version, serial, issuer, validity, subject, public key)
- */
+/*
+    1. Irjunk egy kliens alkalmazást, ami TLS-t használva kapcsolódik a https://bnr.ro/Home.aspx címre és egy HTTP GET
+    kérést küld a Román Nemzeti Bank szerverének. A szerver által válaszként küldött HTML tartalmat a kliens mentse le egy
+    szöveges állományba. A kapcsolat létrejötte után a képernyőre írja a tanúsítvány főbb adatait: verziószám, szériaszám,
+    a tanúsító hatóság neve, kibocsátás dátuma, érvényességi ideje, a tanúsítvány alanyának adatai (név, internetes cím(ei))
+    , a nyilvános kulcs adatai (a titkosító eljárás típusa, az alany nyilvános kulcsa). Ezeket az adatokat a böngészőben is
+    meg lehet nézni (például: https://support.mozilla.org/en-US/kb/secure-website-certificate ,
+    de a kliens legyen képes kinyerni és kiírni a főbb adatokat.
+*/
 public class BNRClient {
 
     private static final Logger logger = LoggerFactory.getLogger(BNRClient.class);
 
-    private static final String BNR_HOST = "bnr.ro";
-    private static final int HTTPS_PORT = 443;
+    private static final String BNR_HOST = "www.bnr.ro";
+    private static final int HTTPS_PORT = 8443;
     private static final String OUTPUT_FILE = "bnr_response.html";
 
     public static void main(String[] args) {
         logger.info("Starting BNR TLS Client...");
 
+        // Use Windows-ROOT keystore to access bnr.ro
+        // System.setProperty("javax.net.ssl.trustStoreType", "Windows-ROOT");
+
+        // Log relevant system properties
+        logger.info("java.home={}", System.getProperty("java.home"));
+        logger.info("javax.net.ssl.trustStore={}", System.getProperty("javax.net.ssl.trustStore"));
+        logger.info("javax.net.ssl.trustStoreType={}", System.getProperty("javax.net.ssl.trustStoreType"));
+        logger.info("javax.net.ssl.keyStore={}", System.getProperty("javax.net.ssl.keyStore"));
+
         try {
-            // Create SSL socket factory using the default trust store
-            // The default trust store contains well-known CA certificates
             SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
 
             // Establish TLS connection to BNR
@@ -41,6 +48,7 @@ public class BNRClient {
 
                 // Configure TLS parameters for security
                 SSLParameters params = socket.getSSLParameters();
+
                 // Enable endpoint identification to verify hostname matches certificate
                 params.setEndpointIdentificationAlgorithm("HTTPS");
                 socket.setSSLParameters(params);
@@ -76,9 +84,7 @@ public class BNRClient {
         }
     }
 
-    /**
-     * Sends an HTTP GET request for the home page.
-     */
+
     private static void sendHttpGetRequest(SSLSocket socket) throws IOException {
         PrintWriter writer = new PrintWriter(
                 new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8),
@@ -87,7 +93,7 @@ public class BNRClient {
 
         // HTTP/1.1 request with required headers
         String httpRequest = """
-            GET /Home.aspx HTTP/1.1
+            GET / HTTP/1.1
             Host:  %s
             User-Agent: Java-SSL-Client/1.0
             Accept: text/html
@@ -101,9 +107,7 @@ public class BNRClient {
         logger.info("HTTP GET request sent");
     }
 
-    /**
-     * Receives and parses the HTTP response, extracting the HTML body.
-     */
+
     private static String receiveHttpResponse(SSLSocket socket) throws IOException {
         BufferedReader reader = new BufferedReader(
                 new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8)
@@ -112,7 +116,6 @@ public class BNRClient {
         StringBuilder response = new StringBuilder();
         String line;
 
-        // Read the entire response (headers + body)
         while ((line = reader.readLine()) != null) {
             response.append(line).append("\n");
         }
@@ -121,9 +124,7 @@ public class BNRClient {
         return response.toString();
     }
 
-    /**
-     * Saves the HTML content to a file.
-     */
+
     private static void saveToFile(String content) throws IOException {
         Path outputPath = Path.of(OUTPUT_FILE);
         Files.writeString(outputPath, content, StandardCharsets.UTF_8);

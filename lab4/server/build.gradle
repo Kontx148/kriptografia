@@ -15,7 +15,7 @@ dependencies {
 }
 
 application {
-    mainClass = 'edu/bbte/kripto/FakeServer'
+    mainClass = 'edu.bbte.kripto.FakeServer'
 }
 
 tasks.register('runMutualAuthServer', JavaExec) {

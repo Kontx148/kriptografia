@@ -1,9 +1,6 @@
 #!/bin/bash
 set -e
 
-# =============================================================================
-# Certificate Generation Script for SSL Project
-#
 # This script creates a complete PKI (Public Key Infrastructure):
 # - RootCA:  The root certificate authority
 # - ClientCA: Signs client certificates (signed by RootCA)
@@ -11,7 +8,6 @@ set -e
 # - Client certificate (signed by ClientCA)
 # - Server certificate (signed by ServerCA)
 # - Fake BNR certificate (self-signed, for MITM simulation)
-# =============================================================================
 
 export MSYS_NO_PATHCONV=1
 export MSYS2_ARG_CONV_EXCL="*"
@@ -33,12 +29,10 @@ echo "  SCS Identifier: $SCS_ID"
 echo "  Hostname:  $HOSTNAME"
 echo "==============================================================="
 
-# =============================================================================
-# TASK 2:  Create Fake BNR Certificate (Self-Signed)
+# Create Fake BNR Certificate (Self-Signed)
 # This simulates what an attacker would create for a MITM attack
-# =============================================================================
 echo ""
-echo ">>> Creating Fake BNR Self-Signed Certificate (Task 2)..."
+echo ">>> Creating Fake BNR Self-Signed Certificate..."
 
 # Generate RSA private key for fake certificate
 openssl genrsa -out fake-bnr.key 2048
@@ -54,33 +48,32 @@ openssl pkcs12 -export -in fake-bnr.crt -inkey fake-bnr.key \
     -out fake-bnr-keystore.p12 -name "fake-bnr" \
     -password "pass:$PASSWORD"
 
-echo "✓ Created fake-bnr-keystore.p12"
+echo "Created fake-bnr-keystore.p12"
 
 # =============================================================================
-# TASK 3: Create Root CA (with Elliptic Curve key)
-# The RootCA is the trust anchor of our PKI
-# =============================================================================
+# Create Root CA (with Elliptic Curve key)
+
 echo ""
-echo ">>> Creating Root CA (Task 3)..."
+echo ">>> Creating Root CA ..."
 
 # Generate EC private key (256-bit, using prime256v1 curve aka secp256r1)
+# ecparam works with elliptic curve parameters
 openssl ecparam -genkey -name prime256v1 -out "${SCS_ID}-RootCA.key"
 
 # Create self-signed Root CA certificate
-# Valid until 2025-02-28
+# Valid for a year
 openssl req -new -x509 -key "${SCS_ID}-RootCA.key" -out "${SCS_ID}-RootCA.crt" \
     -days 365 \
     -subj "/C=RO/ST=Kolozs/L=Kolozsvar/O=BBTE/CN=${SCS_ID}-RootCA" \
     -addext "basicConstraints=critical,CA:TRUE" \
     -addext "keyUsage=critical,keyCertSign,cRLSign"
 
-echo "✓ Created ${SCS_ID}-RootCA.crt"
+echo "Created ${SCS_ID}-RootCA.crt"
 
 # =============================================================================
-# TASK 3: Create Client CA (signed by RootCA)
-# =============================================================================
+# Create Client CA (signed by RootCA)
 echo ""
-echo ">>> Creating Client CA (Task 3)..."
+echo ">>> Creating Client CA..."
 
 # Generate EC private key for ClientCA
 openssl ecparam -genkey -name prime256v1 -out "${SCS_ID}-ClientCA.key"
@@ -102,11 +95,10 @@ openssl x509 -req -in "${SCS_ID}-ClientCA.csr" \
     -days 365 \
     -extfile clientca-ext.cnf
 
-echo "✓ Created ${SCS_ID}-ClientCA.crt (signed by RootCA)"
+echo "Created ${SCS_ID}-ClientCA.crt (signed by RootCA)"
 
 # =============================================================================
-# TASK 3: Create Server CA (signed by RootCA)
-# =============================================================================
+# Create Server CA (signed by RootCA)
 echo ""
 echo ">>> Creating Server CA (Task 3)..."
 
@@ -130,11 +122,11 @@ openssl x509 -req -in "${SCS_ID}-ServerCA.csr" \
     -days 365 \
     -extfile serverca-ext.cnf
 
-echo "✓ Created ${SCS_ID}-ServerCA.crt (signed by RootCA)"
+echo "Created ${SCS_ID}-ServerCA.crt (signed by RootCA)"
 
 # =============================================================================
-# TASK 4: Create Client Certificate (signed by ClientCA)
-# =============================================================================
+# Create Client Certificate (signed by ClientCA)
+
 echo ""
 echo ">>> Creating Client Certificate (Task 4)..."
 
@@ -159,7 +151,7 @@ openssl x509 -req -in "${SCS_ID}-client.csr" \
     -days 365 \
     -extfile client-ext.cnf
 
-echo "✓ Created ${SCS_ID}-client.crt (signed by ClientCA)"
+echo "Created ${SCS_ID}-client.crt (signed by ClientCA)"
 
 # Create client keystore (PKCS12) for Java
 openssl pkcs12 -export -in "${SCS_ID}-client.crt" -inkey "${SCS_ID}-client.key" \
@@ -167,12 +159,11 @@ openssl pkcs12 -export -in "${SCS_ID}-client.crt" -inkey "${SCS_ID}-client.key" 
     -out client-keystore.p12 -name "client" \
     -password "pass:$PASSWORD"
 
-echo "✓ Created client-keystore.p12"
+echo "Created client-keystore.p12"
 
 # =============================================================================
-# TASK 5: Create Server Certificate (signed by ServerCA)
-# Note: This uses RSA 2048-bit key as required
-# =============================================================================
+# Create Server Certificate (signed by ServerCA)
+# Note: This uses RSA 2048-bit key
 echo ""
 echo ">>> Creating Server Certificate (Task 5)..."
 
@@ -198,7 +189,7 @@ openssl x509 -req -in "${SCS_ID}-server.csr" \
     -days 365 \
     -extfile server-ext.cnf
 
-echo "✓ Created ${SCS_ID}-server.crt (signed by ServerCA)"
+echo "Created ${SCS_ID}-server.crt (signed by ServerCA)"
 
 # Create server keystore (PKCS12) for Java
 openssl pkcs12 -export -in "${SCS_ID}-server.crt" -inkey "${SCS_ID}-server.key" \
@@ -206,7 +197,7 @@ openssl pkcs12 -export -in "${SCS_ID}-server.crt" -inkey "${SCS_ID}-server.key" 
     -out server-keystore.p12 -name "server" \
     -password "pass:$PASSWORD"
 
-echo "✓ Created server-keystore.p12"
+echo "Created server-keystore.p12"
 
 # =============================================================================
 # Create Trust Stores
@@ -224,7 +215,7 @@ keytool -importcert -alias "rootca" -file "${SCS_ID}-RootCA.crt" \
     -keystore client-truststore.p12 -storetype PKCS12 \
     -storepass "$PASSWORD" -noprompt
 
-echo "✓ Created client-truststore.p12"
+echo "Created client-truststore.p12"
 
 # Create server trust store (to verify clients)
 # Server needs to trust: RootCA -> ClientCA -> client cert
@@ -232,7 +223,7 @@ keytool -importcert -alias "rootca" -file "${SCS_ID}-RootCA.crt" \
     -keystore server-truststore.p12 -storetype PKCS12 \
     -storepass "$PASSWORD" -noprompt
 
-echo "✓ Created server-truststore.p12"
+echo "Created server-truststore.p12"
 
 # =============================================================================
 # Cleanup and Summary

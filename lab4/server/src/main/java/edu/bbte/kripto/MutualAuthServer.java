@@ -12,7 +12,6 @@ import java.security.KeyStore;
 import java.security. cert.X509Certificate;
 
 /**
- * Task 6: Server with Mutual TLS Authentication (mTLS).
  *
  * This server requires clients to present a valid certificate signed by ClientCA.
  * It demonstrates mutual authentication where both server and client verify each other.
@@ -71,9 +70,6 @@ public class MutualAuthServer {
         }
     }
 
-    /**
-     * Creates an SSL context configured for mutual authentication.
-     */
     private static SSLContext createSSLContext() throws Exception {
         // Load server's keystore (contains private key + certificate)
         KeyStore keyStore = KeyStore.getInstance("PKCS12");
@@ -108,60 +104,76 @@ public class MutualAuthServer {
         return sslContext;
     }
 
-    /**
-     * Handles an authenticated client connection.
-     */
-    private static void handleClient(SSLSocket socket) throws IOException {
+    private static void handleClient(SSLSocket socket) {
         logger.info("Client connected from: {}", socket.getInetAddress());
 
-        // Get client's certificate information
-        try {
+        try (socket) {
+            // Explicitly trigger the TLS handshake
+            socket.startHandshake();
+
+            // Get client's certificate information
             SSLSession session = socket.getSession();
             X509Certificate clientCert = (X509Certificate) session.getPeerCertificates()[0];
             logger.info("Client authenticated as: {}", clientCert.getSubjectX500Principal().getName());
             logger.info("Certificate issued by: {}", clientCert.getIssuerX500Principal().getName());
-        } catch (Exception e) {
-            logger.warn("Could not retrieve client certificate details");
+
+            // Read HTTP request
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8)
+            );
+
+            String line;
+            while ((line = reader.readLine()) != null && !line.isEmpty()) {
+                logger.debug("Request: {}", line);
+            }
+
+            // Send HTML response
+            String htmlContent = readHtmlFile();
+            PrintWriter writer = new PrintWriter(
+                    new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8),
+                    true
+            );
+
+            String response = """
+                    HTTP/1.1 200 OK
+                    Content-Type: text/html; charset=UTF-8
+                    Content-Length: %d
+                    Connection: close
+                                
+                    %s""".formatted(htmlContent.length(), htmlContent);
+
+            writer.print(response.replace("\n", "\r\n"));
+            writer.flush();
+
+            logger.info("Response sent to authenticated client");
+
+        } catch (SSLHandshakeException e) {
+            logger.warn("Client rejected - Certificate authentication failed: {}", e.getMessage());
+        } catch (IOException e) {
+            logger.error("Error during client communication: {}", e.getMessage());
         }
-
-        // Read HTTP request
-        BufferedReader reader = new BufferedReader(
-                new InputStreamReader(socket. getInputStream(), StandardCharsets.UTF_8)
-        );
-
-        String line;
-        while ((line = reader.readLine()) != null && !line.isEmpty()) {
-            logger. debug("Request: {}", line);
-        }
-
-        // Send HTML response
-        String htmlContent = readHtmlFile();
-        PrintWriter writer = new PrintWriter(
-                new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8),
-                true
-        );
-
-        String response = """
-            HTTP/1.1 200 OK
-            Content-Type:  text/html; charset=UTF-8
-            Content-Length:  %d
-            Connection: close
-            
-            %s""". formatted(htmlContent. length(), htmlContent);
-
-        writer.print(response. replace("\n", "\r\n"));
-        writer.flush();
-
-        logger.info("Response sent to authenticated client");
-        socket.close();
+        // Ignore close errors
     }
 
     private static String readHtmlFile() {
         try {
+            // Try to read from resources folder first (bundled in JAR)
+            InputStream resourceStream = MutualAuthServer.class.getClassLoader()
+                    .getResourceAsStream(HTML_FILE);
+            
+            if (resourceStream != null) {
+                logger.info("Reading HTML from resources: {}", HTML_FILE);
+                return new String(resourceStream.readAllBytes(), StandardCharsets.UTF_8);
+            }
+            
+            // Fallback: Try to read from file system (for development)
             Path path = Path.of(HTML_FILE);
             if (Files. exists(path)) {
+                logger.info("Reading HTML from file: {}", path.toAbsolutePath());
                 return Files. readString(path, StandardCharsets.UTF_8);
             }
+            
+            logger.warn("HTML file not found, using default content");
         } catch (IOException e) {
             logger.error("Error reading HTML file: {}", e.getMessage());
         }

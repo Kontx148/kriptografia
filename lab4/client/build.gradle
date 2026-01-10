@@ -15,7 +15,7 @@ dependencies {
 }
 
 application {
-    mainClass = 'edu/bbte/kripto/BNRClient'
+    mainClass = 'edu.bbte.kripto.BNRClient'
 }
 
 // Task to run BNRClient with custom truststore

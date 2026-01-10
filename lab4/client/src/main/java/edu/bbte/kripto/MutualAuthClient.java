@@ -11,7 +11,6 @@ import java.nio. file.Path;
 import java.security. KeyStore;
 
 /**
- * Task 6: Client with Mutual TLS Authentication (mTLS).
  *
  * This client presents its certificate to the server for authentication.
  * It can only connect to servers that trust the ClientCA.
@@ -55,7 +54,7 @@ public class MutualAuthClient {
                 logger.info("Cipher: {}", socket.getSession().getCipherSuite());
 
                 // Display server certificate
-                CertificateUtils. printCertificateInfo(socket.getSession());
+                CertificateUtils.printCertificateInfo(socket.getSession());
 
                 // Send HTTP request
                 sendRequest(socket);
@@ -63,6 +62,9 @@ public class MutualAuthClient {
                 // Receive response
                 String response = receiveResponse(socket);
                 logger.info("Received {} bytes from server", response.length());
+
+                // Save HTML response to file
+                saveResponse(response);
 
             }
 
@@ -74,9 +76,6 @@ public class MutualAuthClient {
         }
     }
 
-    /**
-     * Creates an SSL context with client certificate for mutual authentication.
-     */
     private static SSLContext createSSLContext() throws Exception {
         // Load client's keystore (private key + certificate)
         KeyStore keyStore = KeyStore.getInstance("PKCS12");
@@ -142,5 +141,25 @@ public class MutualAuthClient {
             response.append(line).append("\n");
         }
         return response.toString();
+    }
+
+    private static void saveResponse(String response) {
+        try {
+            // Extract HTML body from HTTP response
+            String htmlContent = response;
+            int bodyStart = response.indexOf("\r\n\r\n");
+            if (bodyStart == -1) {
+                bodyStart = response.indexOf("\n\n");
+            }
+            if (bodyStart != -1) {
+                htmlContent = response.substring(bodyStart + 4);
+            }
+
+            Path outputPath = Path.of("mutual_auth_response.html");
+            Files.writeString(outputPath, htmlContent, StandardCharsets.UTF_8);
+            logger.info("Response saved to: {}", outputPath.toAbsolutePath());
+        } catch (IOException e) {
+            logger.error("Failed to save response: {}", e.getMessage());
+        }
     }
 }

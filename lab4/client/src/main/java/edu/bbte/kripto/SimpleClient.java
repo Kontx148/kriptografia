@@ -33,7 +33,7 @@ public class SimpleClient {
 
     public static void main(String[] args) {
         logger. info("Starting Simple Client (NO client certificate)...");
-        logger.warn("This client has NO certificate and should be REJECTED!");
+        logger.warn("This client has no certificate and should be rejected!");
 
         try {
             // Create SSL context WITHOUT client certificate
@@ -54,9 +54,8 @@ public class SimpleClient {
 
         } catch (SocketException e) {
             // This is the EXPECTED behavior
-            logger.info("Connection correctly rejected!");
+            logger.info("Connection rejected!");
             logger.info("Server refused connection: {}", e.getMessage());
-            logger.info("This proves mutual authentication is working!");
         } catch (Exception e) {
             logger.error("Unexpected error: {}", e.getMessage(), e);
         }

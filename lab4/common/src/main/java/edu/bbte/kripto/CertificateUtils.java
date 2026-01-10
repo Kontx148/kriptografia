@@ -11,17 +11,12 @@ import java.security.interfaces.RSAPublicKey;
 import java.util. Collection;
 import java. util.List;
 
-/**
- * Utility class for extracting and displaying X.509 certificate information.
- * This class provides methods to print detailed certificate data including
- * version, serial number, issuer, validity dates, subject, and public key details.
- */
+
 public class CertificateUtils {
 
     private static final Logger logger = LoggerFactory.getLogger(CertificateUtils.class);
 
     private CertificateUtils() {
-        // Utility class - prevent instantiation
     }
 
     /**
@@ -58,29 +53,29 @@ public class CertificateUtils {
         logger.info("                    CERTIFICATE DETAILS                        ");
         logger.info("===============================================================");
 
-        // 1. Version number (X.509 v1=0, v2=1, v3=2, so we add 1 for display)
+        // Version number
         logger.info("Version: V{}", cert.getVersion());
 
-        // 2. Serial number (unique identifier assigned by the CA)
+        // Serial number (unique identifier assigned by the CA)
         logger.info("Serial Number:  {}", cert.getSerialNumber().toString(16).toUpperCase());
 
-        // 3. Certificate Authority (Issuer) information
+        // Certificate Authority (Issuer) information
         logger. info("Issuer (Certificate Authority): {}", cert.getIssuerX500Principal().getName());
 
-        // 4. Validity period
-        logger.info("Valid From: {}", cert.getNotBefore());
-        logger.info("Valid Until:  {}", cert.getNotAfter());
+        // Validity period
+        logger.info("Not Before: {}", cert.getNotBefore());
+        logger.info("Not After:  {}", cert.getNotAfter());
 
-        // 5. Subject (certificate owner) information
-        logger. info("Subject: {}", cert.getSubjectX500Principal().getName());
+        // Subject (certificate owner)
+        logger. info("Subject (certificate owner): {}", cert.getSubjectX500Principal().getName());
 
-        // 6. Subject Alternative Names (SANs) - additional domain names
+        // Subject Alternative Names (SANs) - additional domain names
         printSubjectAlternativeNames(cert);
 
-        // 7. Public key information
+        // Public key information
         printPublicKeyInfo(cert. getPublicKey());
 
-        // 8. Signature algorithm
+        // Signature algorithm
         logger. info("Signature Algorithm: {}", cert. getSigAlgName());
 
         logger.info("===============================================================");
