@@ -1,14 +1,5 @@
 #!/bin/bash
 set -e
-
-# This script creates a complete PKI (Public Key Infrastructure):
-# - RootCA:  The root certificate authority
-# - ClientCA: Signs client certificates (signed by RootCA)
-# - ServerCA: Signs server certificates (signed by RootCA)
-# - Client certificate (signed by ClientCA)
-# - Server certificate (signed by ServerCA)
-# - Fake BNR certificate (self-signed, for MITM simulation)
-
 export MSYS_NO_PATHCONV=1
 export MSYS2_ARG_CONV_EXCL="*"
 
@@ -30,7 +21,6 @@ echo "  Hostname:  $HOSTNAME"
 echo "==============================================================="
 
 # Create Fake BNR Certificate (Self-Signed)
-# This simulates what an attacker would create for a MITM attack
 echo ""
 echo ">>> Creating Fake BNR Self-Signed Certificate..."
 

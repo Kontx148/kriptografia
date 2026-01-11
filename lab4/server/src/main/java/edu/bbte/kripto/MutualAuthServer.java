@@ -113,9 +113,7 @@ public class MutualAuthServer {
 
             // Get client's certificate information
             SSLSession session = socket.getSession();
-            X509Certificate clientCert = (X509Certificate) session.getPeerCertificates()[0];
-            logger.info("Client authenticated as: {}", clientCert.getSubjectX500Principal().getName());
-            logger.info("Certificate issued by: {}", clientCert.getIssuerX500Principal().getName());
+            CertificateUtils.printCertificateInfo(session);
 
             // Read HTTP request
             BufferedReader reader = new BufferedReader(

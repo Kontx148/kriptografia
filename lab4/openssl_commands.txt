@@ -1,0 +1,402 @@
+openssl x509 -in vnim2413-ServerCA.crt -text -noout
+openssl x509 -in vnim2413-ClientCA.crt -text -noout
+
+openssl verify -CAfile vnim2413-RootCA.crt vnim2413-ClientCA.crt
+openssl verify -CAfile vnim2413-RootCA.crt vnim2413-ServerCA.crt
+
+Azonosító: vnim2413
+Jelszó minden keystore-hoz: asd123
+
+1. RSA privát kulcs generálása (2048 bit):
+-------------------------------------------
+openssl genrsa -out fake-bnr.key 2048
+
+Magyarázat:
+  - genrsa: RSA kulcspár generálás
+  - -out fake-bnr.key: a privát kulcsot ebbe a fájlba menti
+  - 2048: kulcs mérete bitekben
+
+
+2. Self-signed tanúsítvány létrehozása:
+----------------------------------------
+openssl req -new -x509 -key fake-bnr.key -out fake-bnr.crt -days 365 \
+    -subj "/C=RO/ST=Bucuresti/L=Bucuresti/O=Banca Nationala a Romaniei/CN=bnr.ro" \
+    -addext "subjectAltName=DNS:bnr.ro,DNS:www.bnr.ro"
+
+Magyarázat:
+  - req: tanúsítvány kérés létrehozása
+  - -new -x509: új self-signed (önaláírt) X.509 tanúsítvány
+  - -key fake-bnr.key: a privát kulcs, amivel aláírjuk
+  - -out fake-bnr.crt: kimeneti tanúsítvány fájl
+  - -days 365: érvényesség időtartama napokban
+  - -subj: a tanúsítvány alanyának adatai (DN - Distinguished Name):
+      C = Country (ország)
+      ST = State/Province (megye)
+      L = Locality (város)
+      O = Organization (szervezet)
+      CN = Common Name (név, általában a domain név)
+  - -addext "subjectAltName=...": további domain nevek, amikre érvényes
+
+
+3. PKCS12 keystore létrehozása Java-hoz:
+-----------------------------------------
+openssl pkcs12 -export -in fake-bnr.crt -inkey fake-bnr.key \
+    -out fake-bnr-keystore.p12 -name "fake-bnr" \
+    -password "pass:asd123"
+
+Magyarázat:
+  - pkcs12: PKCS#12 formátum kezelése
+  - -export: tanúsítvány és kulcs exportálása PKCS12-be
+  - -in fake-bnr.crt: tanúsítvány fájl
+  - -inkey fake-bnr.key: privát kulcs fájl
+  - -out fake-bnr-keystore.p12: kimeneti keystore fájl
+  - -name "fake-bnr": alias név a keystore-ban
+  - -password "pass:...": keystore jelszava
+
+===============================================================================
+
+--- RootCA (Elliptikus görbe, 256 bit) ---
+
+1. EC privát kulcs generálása:
+-------------------------------
+openssl ecparam -genkey -name prime256v1 -out vnim2413-RootCA.key
+
+Magyarázat:
+  - ecparam: elliptikus görbe paraméterek kezelése
+  - -genkey: új privát kulcs generálása
+  - -name prime256v1: görbe neve (NIST P-256, más néven secp256r1)
+  - -out: kimeneti kulcs fájl
+
+
+2. Self-signed Root CA tanúsítvány:
+------------------------------------
+openssl req -new -x509 -key vnim2413-RootCA.key -out vnim2413-RootCA.crt \
+    -days 365 \
+    -subj "/C=RO/ST=Kolozs/L=Kolozsvar/O=BBTE/CN=vnim2413-RootCA" \
+    -addext "basicConstraints=critical,CA:TRUE" \
+    -addext "keyUsage=critical,keyCertSign,cRLSign"
+
+Magyarázat:
+  - req -new -x509: új self-signed tanúsítvány
+  - -key: privát kulcs a tanúsítvány aláírásához
+  - -out: kimeneti tanúsítvány fájl
+  - -days 365: érvényesség
+  - -subj: Distinguished Name (DN)
+  - -addext "basicConstraints=critical,CA:TRUE": 
+      Ez egy CA (Certificate Authority), kritikus mező
+  - -addext "keyUsage=critical,keyCertSign,cRLSign": 
+      Használati cél: más tanúsítványok aláírása, CRL aláírása
+
+
+--- ClientCA (Elliptikus görbe, 256 bit, RootCA által aláírva) ---
+
+3. ClientCA privát kulcs:
+--------------------------
+openssl ecparam -genkey -name prime256v1 -out vnim2413-ClientCA.key
+
+
+4. Certificate Signing Request (CSR) létrehozása:
+--------------------------------------------------
+openssl req -new -key vnim2413-ClientCA.key -out vnim2413-ClientCA.csr \
+    -subj "/C=RO/ST=Kolozs/L=Kolozsvar/O=BBTE/CN=vnim2413-ClientCA"
+
+Magyarázat:
+  - req -new: új tanúsítvány kérés (CSR) létrehozása
+  - -key: privát kulcs, amihez a CSR tartozik
+  - -out: CSR fájl neve
+  - -subj: alany adatai
+
+
+5. Extensions fájl létrehozása (ClientCA számára):
+---------------------------------------------------
+cat > clientca-ext.cnf << EOF
+basicConstraints = critical,CA:TRUE,pathlen:0
+keyUsage = critical,keyCertSign,cRLSign
+EOF
+
+Magyarázat:
+  - basicConstraints: CA jogosultság, pathlen:0 = max 0 szintű CA alatta
+  - keyUsage: tanúsítványok és CRL-ek aláírására használható
+
+
+6. ClientCA aláírása RootCA-val:
+---------------------------------
+openssl x509 -req -in vnim2413-ClientCA.csr \
+    -CA vnim2413-RootCA.crt -CAkey vnim2413-RootCA.key \
+    -CAcreateserial -out vnim2413-ClientCA.crt \
+    -days 365 \
+    -extfile clientca-ext.cnf
+
+Magyarázat:
+  - x509 -req: tanúsítvány aláírása CSR alapján
+  - -in: bemeneti CSR fájl
+  - -CA: aláíró CA tanúsítványa
+  - -CAkey: aláíró CA privát kulcsa
+  - -CAcreateserial: sorszám fájl automatikus létrehozása
+  - -out: kimeneti aláírt tanúsítvány
+  - -days: érvényesség
+  - -extfile: extensions fájl (további mezők)
+
+
+--- ServerCA (Elliptikus görbe, 256 bit, RootCA által aláírva) ---
+
+7. ServerCA privát kulcs:
+--------------------------
+openssl ecparam -genkey -name prime256v1 -out vnim2413-ServerCA.key
+
+
+8. ServerCA CSR:
+----------------
+openssl req -new -key vnim2413-ServerCA.key -out vnim2413-ServerCA.csr \
+    -subj "/C=RO/ST=Kolozs/L=Kolozsvar/O=BBTE/CN=vnim2413-ServerCA"
+
+
+9. Extensions fájl (ServerCA):
+-------------------------------
+cat > serverca-ext.cnf << EOF
+basicConstraints = critical,CA:TRUE,pathlen:0
+keyUsage = critical,keyCertSign,cRLSign
+EOF
+
+
+10. ServerCA aláírása RootCA-val:
+----------------------------------
+openssl x509 -req -in vnim2413-ServerCA.csr \
+    -CA vnim2413-RootCA.crt -CAkey vnim2413-RootCA.key \
+    -CAcreateserial -out vnim2413-ServerCA.crt \
+    -days 365 \
+    -extfile serverca-ext.cnf
+
+
+===============================================================================
+
+1. Kliens privát kulcs generálása:
+-----------------------------------
+openssl ecparam -genkey -name prime256v1 -out vnim2413-client.key
+
+
+2. Kliens CSR:
+--------------
+openssl req -new -key vnim2413-client.key -out vnim2413-client.csr \
+    -subj "/C=RO/ST=Kolozs/L=Kolozsvar/O=BBTE/CN=vnim2413-client"
+
+
+3. Extensions fájl (end-entity cert, NEM CA):
+----------------------------------------------
+cat > client-ext.cnf << EOF
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature,keyEncipherment
+extendedKeyUsage = clientAuth
+EOF
+
+Magyarázat:
+  - basicConstraints: CA:FALSE = ez NEM CA, hanem végfelhasználói tanúsítvány
+  - keyUsage: digitális aláírás és kulcs titkosítás
+  - extendedKeyUsage: clientAuth = kliens autentikációra használható (TLS)
+
+
+4. Kliens tanúsítvány aláírása ClientCA-val:
+---------------------------------------------
+openssl x509 -req -in vnim2413-client.csr \
+    -CA vnim2413-ClientCA.crt -CAkey vnim2413-ClientCA.key \
+    -CAcreateserial -out vnim2413-client.crt \
+    -days 365 \
+    -extfile client-ext.cnf
+
+
+5. Kliens keystore létrehozása Java-hoz:
+-----------------------------------------
+openssl pkcs12 -export -in vnim2413-client.crt -inkey vnim2413-client.key \
+    -certfile vnim2413-ClientCA.crt \
+    -out client-keystore.p12 -name "client" \
+    -password "pass:asd123"
+
+Magyarázat:
+  - -certfile: a ClientCA tanúsítványt is hozzáfűzi (lánc)
+  - Ez lehetővé teszi, hogy a szerver ellenőrizze a teljes láncot
+
+
+===============================================================================
+
+1. RSA privát kulcs generálása:
+--------------------------------
+openssl genrsa -out vnim2413-server.key 2048
+
+Magyarázat:
+  - Ez RSA kulcsot generál (nem EC-t!), 2048 bit méretben
+  - A feladat specifikáció szerint a szerver RSA-t használ
+
+
+2. Szerver CSR:
+---------------
+openssl req -new -key vnim2413-server.key -out vnim2413-server.csr \
+    -subj "/C=RO/ST=Kolozs/L=Kolozsvar/O=BBTE/CN=$HOSTNAME"
+
+Magyarázat:
+  - CN értéke a gép hostname-je (automatikusan behelyettesítve)
+
+
+3. Extensions fájl (szerver tanúsítvány):
+------------------------------------------
+cat > server-ext.cnf << EOF
+basicConstraints = critical,CA:FALSE
+keyUsage = critical,digitalSignature,keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = DNS:$HOSTNAME,DNS:localhost,IP:127.0.0.1
+EOF
+
+Magyarázat:
+  - extendedKeyUsage: serverAuth = szerver autentikációra (TLS)
+  - subjectAltName: alternatív nevek, amikre a tanúsítvány érvényes
+      (hostname, localhost, 127.0.0.1)
+
+
+4. Szerver tanúsítvány aláírása ServerCA-val:
+----------------------------------------------
+openssl x509 -req -in vnim2413-server.csr \
+    -CA vnim2413-ServerCA.crt -CAkey vnim2413-ServerCA.key \
+    -CAcreateserial -out vnim2413-server.crt \
+    -days 365 \
+    -extfile server-ext.cnf
+
+
+5. Szerver keystore létrehozása:
+---------------------------------
+openssl pkcs12 -export -in vnim2413-server.crt -inkey vnim2413-server.key \
+    -certfile vnim2413-ServerCA.crt \
+    -out server-keystore.p12 -name "server" \
+    -password "pass:asd123"
+
+
+===============================================================================
+
+1. Kliens truststore (szerver ellenőrzéséhez):
+-----------------------------------------------
+keytool -importcert -alias "rootca" -file vnim2413-RootCA.crt \
+    -keystore client-truststore.p12 -storetype PKCS12 \
+    -storepass "asd123" -noprompt
+
+Magyarázat:
+  - keytool: Java keystore kezelő eszköz
+  - -importcert: tanúsítvány importálása
+  - -alias "rootca": belső név a truststore-ban
+  - -file: importálandó tanúsítvány
+  - -keystore: cél truststore fájl
+  - -storetype PKCS12: modern formátum (régebben JKS volt)
+  - -storepass: truststore jelszava
+  - -noprompt: nem kér megerősítést
+
+
+2. Szerver truststore (kliens ellenőrzéséhez):
+-----------------------------------------------
+keytool -importcert -alias "rootca" -file vnim2413-RootCA.crt \
+    -keystore server-truststore.p12 -storetype PKCS12 \
+    -storepass "asd123" -noprompt
+
+
+Miért csak a RootCA-t importáljuk?
+-----------------------------------
+A truststore-ba csak a ROOT CA tanúsítványt rakjuk, mert:
+  - Ha megbízunk a ROOT CA-ban, automatikusan megbízunk minden CA-ban,
+    amit ő aláírt (ClientCA, ServerCA)
+  - A teljes tanúsítványláncot a kliens/szerver prezentálja a TLS handshake során
+  - A Java ellenőrzi a láncot: 
+      kliens cert → ClientCA → RootCA ✓
+      szerver cert → ServerCA → RootCA ✓
+
+
+===============================================================================
+TANÚSÍTVÁNYLÁNC ELLENŐRZÉSE
+===============================================================================
+
+CA tanúsítványok ellenőrzése:
+------------------------------
+openssl verify -CAfile vnim2413-RootCA.crt vnim2413-ClientCA.crt
+openssl verify -CAfile vnim2413-RootCA.crt vnim2413-ServerCA.crt
+
+
+Kliens tanúsítvány ellenőrzése (teljes lánccal):
+-------------------------------------------------
+openssl verify \
+  -CAfile vnim2413-RootCA.crt \
+  -untrusted vnim2413-ClientCA.crt \
+  vnim2413-client.crt
+
+
+Szerver tanúsítvány ellenőrzése:
+---------------------------------
+openssl verify \
+  -CAfile vnim2413-RootCA.crt \
+  -untrusted vnim2413-ServerCA.crt \
+  vnim2413-server.crt
+
+Magyarázat:
+  - -CAfile: megbízható root CA
+  - -untrusted: köztes CA-k (nem root, de a láncban vannak)
+  - Utolsó argumentum: az ellenőrizendő tanúsítvány
+
+
+Tanúsítvány részleteinek megtekintése:
+---------------------------------------
+openssl x509 -in vnim2413-RootCA.crt -text -noout
+
+Magyarázat:
+  - x509: X.509 tanúsítvány kezelés
+  - -in: bemeneti tanúsítvány fájl
+  - -text: emberi olvasható formátum
+  - -noout: ne írja ki a PEM kódolt verziót (csak a text)
+
+
+Keystore tartalmának listázása:
+--------------------------------
+keytool -list -keystore client-keystore.p12 -storepass asd123 -storetype PKCS12
+
+Magyarázat:
+  - -list: listázza a keystore tartalmát
+  - Kiírja az aliasokat, típusokat, érvényességi dátumokat
+
+
+===============================================================================
+ÖSSZEFOGLALÁS - Létrehozott Fájlok
+===============================================================================
+
+CA Tanúsítványok (Elliptikus Görbe, 256 bit):
+  • vnim2413-RootCA.crt/key      - Root CA (self-signed)
+  • vnim2413-ClientCA.crt/key    - Client CA (RootCA által aláírva)
+  • vnim2413-ServerCA.crt/key    - Server CA (RootCA által aláírva)
+
+Végfelhasználói Tanúsítványok:
+  • vnim2413-client.crt/key      - Kliens tanúsítvány (EC 256, ClientCA aláírta)
+  • vnim2413-server.crt/key      - Szerver tanúsítvány (RSA 2048, ServerCA aláírta)
+  • fake-bnr.crt/key             - Hamis BNR tanúsítvány (self-signed, MITM)
+
+Java Keystores (PKCS12):
+  • client-keystore.p12          - Kliens privát kulcs + tanúsítvány
+  • server-keystore.p12          - Szerver privát kulcs + tanúsítvány
+  • client-truststore.p12        - Megbízható CA-k (kliens számára)
+  • server-truststore.p12        - Megbízható CA-k (szerver számára)
+  • fake-bnr-keystore.p12        - Hamis BNR keystore
+
+Minden PKCS12 fájl jelszava: asd123
+
+===============================================================================
+PKI HIERARCHIA
+===============================================================================
+
+                           vnim2413-RootCA (EC 256)
+                                    |
+                    +---------------+---------------+
+                    |                               |
+            vnim2413-ClientCA (EC 256)      vnim2413-ServerCA (EC 256)
+                    |                               |
+            vnim2413-client (EC 256)        vnim2413-server (RSA 2048)
+
+
+Mutual TLS (mTLS) Authentication:
+  1. Szerver prezentálja: server.crt → ServerCA → RootCA
+  2. Kliens ellenőrzi: RootCA megvan a client-truststore-ban? ✓
+  3. Kliens prezentálja: client.crt → ClientCA → RootCA
+  4. Szerver ellenőrzi: RootCA megvan a server-truststore-ban? ✓
+  5. Mindkét fél hitelesítve ✓
+
+===============================================================================
