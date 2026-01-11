@@ -12,14 +12,6 @@ import java.nio.file. Files;
 import java.nio.file. Path;
 import java.security.KeyStore;
 
-/**
- * Simple client WITHOUT client certificate.
- *
- * This client is used to test that MutualAuthServer correctly rejects
- * connections from clients without proper certificates.
- *
- * Expected behavior:  Connection should be REJECTED by the server!
- */
 public class SimpleClient {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleClient.class);
@@ -27,7 +19,7 @@ public class SimpleClient {
     private static final String SERVER_HOST = "localhost";
     private static final int SERVER_PORT = 8443;
 
-    // Only truststore - NO client certificate!
+    // Only truststore
     private static final String TRUSTSTORE_PATH = "../certs/client-truststore.p12";
     private static final String STORE_PASSWORD = "asd123";
 
@@ -44,17 +36,14 @@ public class SimpleClient {
 
             try (SSLSocket socket = (SSLSocket) factory.createSocket(SERVER_HOST, SERVER_PORT)) {
 
-                // This handshake should FAIL because server requires client auth
                 socket.startHandshake();
 
-                // If we reach here, something is wrong!
-                logger.error("Connection succeeded - but it shouldn't have!");
-                logger.error("Server should have rejected us!");
+                // If we reach here, the server accepted the connection - which is NOT expected
+                logger.error("Connection succeeded unexpectedly");
             }
 
         } catch (SocketException e) {
-            // This is the EXPECTED behavior
-            logger.info("Connection rejected!");
+            logger.info("Connection rejected");
             logger.info("Server refused connection: {}", e.getMessage());
         } catch (Exception e) {
             logger.error("Unexpected error: {}", e.getMessage(), e);

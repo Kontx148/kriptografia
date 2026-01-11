@@ -23,7 +23,7 @@ public class BNRClient {
     private static final Logger logger = LoggerFactory.getLogger(BNRClient.class);
 
     private static final String BNR_HOST = "www.bnr.ro";
-    private static final int HTTPS_PORT = 8443;
+    private static final int HTTPS_PORT = 443;
     private static final String OUTPUT_FILE = "bnr_response.html";
 
     public static void main(String[] args) {
